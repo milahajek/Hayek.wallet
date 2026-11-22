@@ -1,0 +1,1 @@
+Support development: donation address with QR code in Settings.

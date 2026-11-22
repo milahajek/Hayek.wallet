@@ -79,6 +79,9 @@ class ScreenshotTest {
         it.setThemeMode(2); it.connected = true; it.setServer(PUBLIC_SERVERS[0].second); it.screen = Screen.Settings
     }
 
+    @Config(qualifiers = "w411dp-h1800dp-xxhdpi")
+    @Test fun s18_donate() = shoot("18_dary") { it.setThemeMode(2); it.connected = true; it.setServer("ssl://192.168.0.10:50002"); it.screen = Screen.Settings }
+
     @Test fun s1_welcome() = shoot("1_uvod") { it.setThemeMode(0) }
     @Test fun s2_dice() = shoot("2_kostky") { it.screen = Screen.Dice; it.rolls = "35216614523362154126635214513624436521164352614253366" }
     @Test fun s3_seed() = shoot("3_slova") { it.screen = Screen.ShowSeed(fakeWords) }

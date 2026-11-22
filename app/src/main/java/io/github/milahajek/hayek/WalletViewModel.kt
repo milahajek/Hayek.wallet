@@ -65,6 +65,9 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun txLink(txid: String, vout: Int? = null): String? =
         explorerUrl.takeIf { it.isNotBlank() }?.let { "$it/tx/$txid" + (vout?.let { v -> "#vout=$v" } ?: "") }
 
+    /** Adresa, kterou se má předvyplnit obrazovka Odeslat (např. dar). */
+    var sendPrefill: String = ""
+
     /** Kam se vrátit z obrazovky mincí. */
     var coinsReturn: Screen = Screen.Home
     var serverUrl by mutableStateOf(prefs.getString("server", DEFAULT_SERVER) ?: DEFAULT_SERVER)

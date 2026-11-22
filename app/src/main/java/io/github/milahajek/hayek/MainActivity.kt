@@ -551,7 +551,7 @@ fun ReceiveScreen(vm: WalletViewModel) {
 @Composable
 fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
     val ctx = LocalContext.current
-    var to by remember { mutableStateOf("") }
+    var to by remember { mutableStateOf(vm.sendPrefill.also { vm.sendPrefill = "" }) }
     var amount by remember { mutableStateOf("") }
     var all by remember { mutableStateOf(false) }
     val p = vm.prepared
@@ -793,6 +793,32 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
             GlassButton(onClick = { confirmDelete = true }, Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Smazat peněženku z telefonu") }
         }
+
+        // Podpora vývoje – adresa pro dary
+        HorizontalDivider(Modifier.padding(vertical = 20.dp))
+        Text("Podpořit vývoj", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(
+            "Hayek Wallet je zdarma a s otevřeným kódem. Pokud vám je užitečná, můžete přispět libovolnou částkou v bitcoinech.",
+            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(12.dp))
+        val donateQr = remember { qrBitmap("bitcoin:$DONATION_ADDRESS?label=Hayek%20Wallet") }
+        Image(donateQr.asImageBitmap(), "QR kód adresy pro dary",
+            Modifier.size(200.dp).align(Alignment.CenterHorizontally).background(Color.White).padding(6.dp))
+        Spacer(Modifier.height(8.dp))
+        androidx.compose.foundation.text.selection.SelectionContainer(Modifier.align(Alignment.CenterHorizontally)) {
+            Text(DONATION_ADDRESS.chunked(4).joinToString(" "), fontFamily = FontFamily.Monospace, fontSize = 13.sp, textAlign = TextAlign.Center)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            GlassButton(onClick = { copy(ctx, DONATION_ADDRESS); vm.message = "Adresa pro dary zkopírována. Děkujeme!" }, Modifier.weight(1f)) {
+                Icon(Icons.Default.ContentCopy, null); Spacer(Modifier.width(6.dp)); Text("Kopírovat")
+            }
+            if (vm.isOpen && !vm.watchOnly) HayekButton(onClick = { vm.sendPrefill = DONATION_ADDRESS; vm.openSend() }, Modifier.weight(1f)) {
+                Icon(Icons.Default.Favorite, null); Spacer(Modifier.width(6.dp)); Text("Přispět")
+            }
+        }
+        Spacer(Modifier.height(24.dp))
     }
     if (confirmDelete) {
         AlertDialog(

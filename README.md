@@ -44,6 +44,12 @@ rolls = "3521661452..."                 # vaše hody (min. 99)
 print(Mnemonic("english").to_mnemonic(hashlib.sha256(rolls.encode()).digest()))
 ```
 
+## Podpořit vývoj
+
+Pokud je vám Hayek Wallet užitečná, můžete přispět v bitcoinech (adresa je i v aplikaci v Nastavení):
+
+`bc1qwnqafccacrx0cnfuqdr5sr0scjzeacpw8srt8a`
+
 ## Licence
 
 GNU General Public License v3.0 nebo novější – viz [`LICENSE`](LICENSE). Licence knihoven viz [`NOTICE.md`](NOTICE.md).
@@ -66,5 +72,7 @@ GNU General Public License v3.0 nebo novější – viz [`LICENSE`](LICENSE). Li
 - No analytics, ads or telemetry; talks only to the server you configure.
 
 **Build:** `./gradlew assembleRelease` (unsigned without the author's keystore).
+
+**Donate (Bitcoin):** `bc1qwnqafccacrx0cnfuqdr5sr0scjzeacpw8srt8a`
 
 **License:** GPL-3.0-or-later. Third-party licenses in [`NOTICE.md`](NOTICE.md).

@@ -38,6 +38,9 @@ val PUBLIC_SERVERS = listOf(
 
 fun isPublicServer(url: String) = PUBLIC_SERVERS.any { it.second == normalizeServerUrl(url) }
 
+/** Adresa pro dobrovolné příspěvky na vývoj (zobrazena v Nastavení). */
+const val DONATION_ADDRESS = "bc1qwnqafccacrx0cnfuqdr5sr0scjzeacpw8srt8a"
+
 /** Žádný výchozí server – každý uživatel zadá svůj vlastní uzel (nebo si vědomě vybere veřejný). */
 const val DEFAULT_SERVER = ""
 const val NO_SERVER = "NO_SERVER"
