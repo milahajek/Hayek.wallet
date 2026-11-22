@@ -2,7 +2,7 @@
 <p><b>Experimental, unaudited software – use with small amounts only. The user interface is currently in Czech.</b></p>
 <ul>
 <li>24-word BIP39 seed from 99+ rolls of a six-sided die (SHA-256 of the rolls, same method as Coldcard and SeedSigner – independently verifiable)</li>
-<li>No default or fallback public servers; mainnet check of the server</li>
+<li>No default server; your node's certificate is pinned. Users without a node can deliberately choose a public server after a privacy warning</li>
 <li>Standard BIP84 native SegWit addresses – restore in any common wallet</li>
 <li>Coin control: choose which coins to spend, freeze coins</li>
 <li>Watch-only mode (zpub/ypub/xpub or descriptor) and public descriptor export</li>

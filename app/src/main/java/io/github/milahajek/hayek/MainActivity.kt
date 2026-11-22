@@ -454,7 +454,7 @@ fun HomeScreen(vm: WalletViewModel) {
             GlassCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Nastavte svůj uzel", fontWeight = FontWeight.Bold)
-                    Text("Peněženka se připojuje jen k vašemu vlastnímu Electrum serveru. Zadejte jeho adresu v Nastavení.", fontSize = 13.sp)
+                    Text("Zadejte v Nastavení adresu svého Electrum serveru (Fulcrum, ElectRS). Kdo vlastní uzel nemá, může si tam vybrat veřejný server.", fontSize = 13.sp)
                     Spacer(Modifier.height(8.dp))
                     HayekButton(onClick = { vm.screen = Screen.Settings }, Modifier.fillMaxWidth()) { Text("Otevřít Nastavení") }
                 }
@@ -650,7 +650,7 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
             HayekButton(onClick = { vm.setServer(url); vm.message = "Uloženo." }, modifier = Modifier.weight(1f)) { Text("Uložit") }
         }
         Spacer(Modifier.height(8.dp))
-        Text("Telefon musí být ve stejné síti jako uzel, nebo připojený domů přes VPN (např. WireGuard). Aplikace se nikdy nepřipojí k cizímu serveru.",
+        if (!isPublicServer(url)) Text("Telefon musí být ve stejné síti jako uzel, nebo připojený domů přes VPN (např. WireGuard). Aplikace se sama od sebe nikdy nepřipojí k cizímu serveru.",
             fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         // Certifikát uzlu (připnutí)
@@ -658,7 +658,23 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
         val fp = vm.pinnedFingerprint(url)
         var confirmForget by remember { mutableStateOf(false) }
         Spacer(Modifier.height(10.dp))
+        var pickPublic by remember { mutableStateOf(false) }
         when {
+            isPublicServer(url) -> GlassCard(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Orange)) {
+                Column(Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Public, null, tint = Orange)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Veřejný server", fontWeight = FontWeight.SemiBold)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Provozovatel serveru vidí všechny adresy této peněženky, její zůstatek, historii a vaši IP adresu. " +
+                            "Ke klíčům se nedostane a nic utratit nemůže. Pro soukromí doporučujeme vlastní uzel.",
+                        fontSize = 12.sp
+                    )
+                }
+            }
             url.startsWith("tcp://") -> Text(
                 "⚠ tcp:// je nešifrované spojení – kdokoli ve stejné síti vidí, na které adresy se peněženka ptá. Doporučujeme ssl://.",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.error
@@ -684,6 +700,46 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
             url.startsWith("ssl://") -> Text(
                 "Certifikát uzlu se uloží (připne) při prvním spojení. Pak už peněženka jiný nepřijme.",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        GlassButton(onClick = { pickPublic = true }, Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.Public, null); Spacer(Modifier.width(6.dp)); Text("Nemám vlastní uzel – veřejný server")
+        }
+        if (pickPublic) {
+            var understood by remember { mutableStateOf(false) }
+            AlertDialog(
+                onDismissRequest = { pickPublic = false },
+                title = { Text("Veřejný server") },
+                text = {
+                    Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+                        Text(
+                            "Server cizího provozovatele uvidí:\n• všechny adresy této peněženky a že patří k sobě,\n• zůstatek a celou historii plateb,\n• vaši IP adresu.\n\n" +
+                                "Nedostane se ke klíčům ani ke slovům a nemůže nic utratit. Mohl by ale zatajit transakci nebo ukázat nesprávný zůstatek.\n\n" +
+                                "Seznam serverů je převzatý z peněženky Sparrow.",
+                            fontSize = 14.sp
+                        )
+                        Row(Modifier.fillMaxWidth().clickable { understood = !understood }, verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = understood, onCheckedChange = { understood = it })
+                            Text("Rozumím a přesto chci veřejný server", fontSize = 14.sp)
+                        }
+                        if (understood) {
+                            Spacer(Modifier.height(4.dp))
+                            PUBLIC_SERVERS.forEach { (name, u) ->
+                                TextButton(onClick = {
+                                    url = u; vm.setServer(u); pickPublic = false
+                                    vm.message = "Nastaven veřejný server $name.\nZkuste spojení tlačítkem Vyzkoušet. Když server nebude odpovídat, vyberte jiný."
+                                }, Modifier.fillMaxWidth()) {
+                                    Column(Modifier.fillMaxWidth()) {
+                                        Text(name, fontWeight = FontWeight.SemiBold)
+                                        Text(u.removePrefix("ssl://"), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { pickPublic = false }) { Text("Zrušit") } }
             )
         }
         if (confirmForget) AlertDialog(

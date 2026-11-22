@@ -22,7 +22,23 @@ import java.security.MessageDigest
 
 /** SKUTEČNÝ Bitcoin (mainnet). */
 val NETWORK = Network.BITCOIN
-/** Žádný výchozí server – každý uživatel zadá svůj vlastní uzel. */
+/**
+ * Veřejné Electrum servery pro ty, kdo nemají vlastní uzel (seznam převzatý z peněženky Sparrow).
+ * Volitelné – peněženka je nikdy nepoužije sama od sebe. Server vidí adresy, zůstatek a IP adresu.
+ */
+val PUBLIC_SERVERS = listOf(
+    "Blockstream" to "ssl://electrum.blockstream.info:50002",
+    "Blockstream (port 700)" to "ssl://blockstream.info:700",
+    "Luke Childs" to "ssl://bitcoin.lu.ke:50002",
+    "Emzy" to "ssl://electrum.emzy.de:50002",
+    "Bitaroo" to "ssl://electrum.bitaroo.net:50002",
+    "DIY Nodes" to "ssl://electrum.diynodes.com:50022",
+    "Seth For Privacy" to "ssl://fulcrum.sethforprivacy.com:50002",
+)
+
+fun isPublicServer(url: String) = PUBLIC_SERVERS.any { it.second == url.trim() }
+
+/** Žádný výchozí server – každý uživatel zadá svůj vlastní uzel (nebo si vědomě vybere veřejný). */
 const val DEFAULT_SERVER = ""
 const val NO_SERVER = "NO_SERVER"
 /** Mempool na vlastním RaspiBlitzu (HTTP 4080, HTTPS 4081). */
@@ -160,10 +176,11 @@ object Seed {
 fun connect(url: String, pins: PinStore): ElectrumClient {
     if (url.isBlank()) throw IllegalStateException(NO_SERVER)
     val addr = ServerAddr.parse(url)
-    // U šifrovaného spojení nejdřív ověříme certifikát uzlu proti uloženému otisku.
-    if (addr.ssl) verifyServerCert(addr.host, addr.port, pins)
-    // Domácí uzel má certifikát podepsaný sám sebou – ten jsme právě ověřili otiskem.
-    val client = ElectrumClient(url.trim(), null, 20.toUByte(), 2.toUByte(), false)
+    val public = isPublicServer(url)
+    // Vlastní uzel (certifikát podepsaný sám sebou): ověříme ho proti uloženému otisku.
+    // Veřejný server: certifikát ověří certifikační autorita (připínání by se rozbíjelo při každé obnově).
+    if (addr.ssl && !public) verifyServerCert(addr.host, addr.port, pins)
+    val client = ElectrumClient(url.trim(), null, 20.toUByte(), 2.toUByte(), public)
     val genesis = client.serverFeatures().genesisHash.toString()
     check(genesis == MAINNET_GENESIS) { "Server není Bitcoin mainnet – odmítám se připojit." }
     return client
@@ -175,8 +192,11 @@ fun testServer(url: String, pins: PinStore): String {
     val tip = c.blockHeadersSubscribe().height
     val ver = c.serverFeatures().serverVersion
     val addr = ServerAddr.parse(url)
-    val sec = if (addr.ssl) "Šifrováno, certifikát ověřen:\n${pins.get(addr.hostPort)?.take(23)}…"
-    else "⚠ Nešifrované spojení (tcp). Doporučujeme ssl://."
+    val sec = when {
+        isPublicServer(url) -> "Šifrováno, certifikát ověřen certifikační autoritou.\n⚠ Veřejný server vidí vaše adresy, zůstatek a IP adresu."
+        addr.ssl -> "Šifrováno, certifikát ověřen:\n${pins.get(addr.hostPort)?.take(23)}…"
+        else -> "⚠ Nešifrované spojení (tcp). Doporučujeme ssl://."
+    }
     return "Spojeno ✔\n$ver\nPoslední blok: $tip\n\n$sec"
 }
 

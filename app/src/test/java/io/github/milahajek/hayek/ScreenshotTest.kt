@@ -75,6 +75,10 @@ class ScreenshotTest {
         it.screen = Screen.Settings
     }
 
+    @Test fun s17_public() = shoot("17_verejny_server") {
+        it.setThemeMode(2); it.connected = true; it.setServer(PUBLIC_SERVERS[0].second); it.screen = Screen.Settings
+    }
+
     @Test fun s1_welcome() = shoot("1_uvod") { it.setThemeMode(0) }
     @Test fun s2_dice() = shoot("2_kostky") { it.screen = Screen.Dice; it.rolls = "35216614523362154126635214513624436521164352614253366" }
     @Test fun s3_seed() = shoot("3_slova") { it.screen = Screen.ShowSeed(fakeWords) }

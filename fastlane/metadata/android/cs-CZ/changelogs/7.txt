@@ -1,0 +1,1 @@
+Volitelné veřejné Electrum servery pro ty, kdo nemají vlastní uzel (seznam ze Sparrow), s jasným upozorněním na soukromí a ověřením certifikátu certifikační autoritou.

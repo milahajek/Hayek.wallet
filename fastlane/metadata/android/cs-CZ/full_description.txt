@@ -2,7 +2,7 @@
 <p><b>Experimentální software bez auditu – používejte jen na malé částky.</b></p>
 <ul>
 <li>24 slov (BIP39) z 99 a více hodů šestistěnnou kostkou (SHA-256 z hodů, stejná metoda jako Coldcard a SeedSigner – lze nezávisle ověřit)</li>
-<li>Žádný výchozí ani záložní veřejný server, kontrola, že server je mainnet</li>
+<li>Žádný výchozí server, certifikát vašeho uzlu je připnutý. Kdo uzel nemá, může po upozornění na soukromí zvolit veřejný server</li>
 <li>Standardní adresy BIP84 – peněženku obnovíte v jakékoli běžné peněžence</li>
 <li>Coin control: výběr mincí k utracení a jejich zmrazení</li>
 <li>Sledovací režim (zpub/ypub/xpub nebo deskriptor) a export veřejného deskriptoru</li>
