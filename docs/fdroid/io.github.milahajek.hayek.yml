@@ -14,14 +14,14 @@ RepoType: git
 Repo: https://github.com/milahajek/Hayek.wallet.git
 
 Builds:
-  - versionName: 1.2.1
-    versionCode: 8
-    commit: v1.2.1
+  - versionName: 1.2.2
+    versionCode: 9
+    commit: V1.2.2
     subdir: app
     gradle:
       - yes
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: 1.2.1
-CurrentVersionCode: 8
+CurrentVersion: 1.2.2
+CurrentVersionCode: 9
