@@ -2,6 +2,11 @@ package io.github.milahajek.hayek
 
 import android.content.Intent
 import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -59,57 +64,202 @@ fun LightningHomeCard(vm: WalletViewModel) {
 
 @Composable
 fun LightningScreen(vm: WalletViewModel) {
+    val ctx = LocalContext.current
     val b = vm.lnBalance
     val i = vm.lnInfo
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Spacer(Modifier.height(8.dp))
-        GlassCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Bolt, null, tint = Bolt)
-                    Text("Lightning · ${i?.alias ?: vm.lnConfig?.hostPort ?: ""}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(vm.amount(b?.canSendSat ?: 0), fontSize = 30.sp, fontWeight = FontWeight.Bold)
-                Text("můžete poslat", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-                Spacer(Modifier.height(6.dp))
-                Text("Můžete přijmout: ${vm.amount(b?.canReceiveSat ?: 0)}", fontSize = 13.sp)
-                if ((b?.pendingSat ?: 0) > 0) Text("Otevírá se kanál: ${formatSat(b!!.pendingSat)}", fontSize = 13.sp, color = HayekOrange)
-                if (i != null && i.activeChannels == 0) Text("Uzel nemá žádný aktivní kanál.", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-            }
-        }
-        vm.lnError?.let {
-            Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            HayekButton(onClick = { vm.openLnReceive() }, Modifier.weight(1f).height(52.dp)) {
-                Icon(Icons.Default.CallReceived, null); Spacer(Modifier.width(6.dp)); Text("Přijmout")
-            }
-            HayekButton(onClick = { vm.openLnPay() }, Modifier.weight(1f).height(52.dp)) {
-                Icon(Icons.Default.Bolt, null); Spacer(Modifier.width(6.dp)); Text("Zaplatit")
-            }
-        }
-        Row(Modifier.padding(top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Historie", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            IconButton(onClick = { vm.lnRefresh() }, enabled = !vm.busy) { Icon(Icons.Default.Refresh, "Obnovit") }
-        }
-        if (vm.lnHistory.isEmpty()) Text(if (vm.busy) "Načítám z vašeho uzlu…" else "Zatím žádné Lightning platby.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        LazyColumn(Modifier.fillMaxSize()) {
-            items(vm.lnHistory, key = { it.id }) { h ->
-                val date = SimpleDateFormat("d. M. yyyy HH:mm", Locale.forLanguageTag("cs")).format(Date(h.time * 1000))
-                ListItem(
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    leadingContent = {
-                        Icon(if (h.incoming) Icons.Default.CallReceived else Icons.Default.Bolt, null, tint = if (h.incoming) Green else Bolt)
-                    },
-                    headlineContent = { Text(if (vm.hideBalance) "••••• sat" else (if (h.incoming) "+" else "−") + formatSat(h.amountSat), fontWeight = FontWeight.SemiBold) },
-                    supportingContent = {
-                        Text(date + (if (h.feeSat > 0) " · poplatek ${h.feeSat} sat" else "") + (if (h.memo.isNotBlank()) " · ${h.memo}" else ""), fontSize = 12.sp)
+    var help by remember { mutableStateOf(false) }
+    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        item {
+            Spacer(Modifier.height(8.dp))
+            GlassCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(20.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Bolt, null, tint = Bolt)
+                        Text("Lightning · ${i?.alias ?: vm.lnConfig?.hostPort ?: ""}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                )
-                HorizontalDivider()
+                    Text(vm.amount(b?.canSendSat ?: 0), fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                    Text("můžete poslat", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text("Můžete přijmout: ${vm.amount(b?.canReceiveSat ?: 0)}", fontSize = 13.sp)
+                }
+            }
+            vm.lnError?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                HayekButton(onClick = { vm.openLnReceive() }, Modifier.weight(1f).height(52.dp)) {
+                    Icon(Icons.Default.CallReceived, null); Spacer(Modifier.width(6.dp)); Text("Přijmout")
+                }
+                HayekButton(onClick = { vm.openLnPay() }, Modifier.weight(1f).height(52.dp)) {
+                    Icon(Icons.Default.Bolt, null); Spacer(Modifier.width(6.dp)); Text("Zaplatit")
+                }
+            }
+            val chans = vm.lnChannels
+            Row(Modifier.padding(top = 18.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Kanály" + (chans?.let { " (${it.size})" } ?: ""), fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                IconButton(onClick = { help = true }) { Icon(Icons.Default.HelpOutline, "Co je kanál?", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                IconButton(onClick = { vm.lnRefresh() }, enabled = !vm.busy) { Icon(Icons.Default.Refresh, "Obnovit") }
+            }
+            when {
+                chans == null -> Text(if (vm.busy) "Načítám kanály…" else "Kanály se nepodařilo načíst.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                chans.isEmpty() -> GlassCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Uzel zatím nemá žádný kanál", fontWeight = FontWeight.SemiBold)
+                        Text("Bez kanálu nejde přes Lightning platit. Kanál se otevírá na RaspiBlitzu (lncli openchannel …).", fontSize = 13.sp)
+                    }
+                }
+                else -> chans.forEach { ChannelCard(it, vm) { url -> openTx(ctx, vm, url) }; Spacer(Modifier.height(10.dp)) }
+            }
+            Text("Historie", fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
+            if (vm.lnHistory.isEmpty()) Text(if (vm.busy) "Načítám z vašeho uzlu…" else "Zatím žádné Lightning platby.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        items(vm.lnHistory, key = { it.id }) { h ->
+            val date = SimpleDateFormat("d. M. yyyy HH:mm", Locale.forLanguageTag("cs")).format(Date(h.time * 1000))
+            ListItem(
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                leadingContent = {
+                    Icon(if (h.incoming) Icons.Default.CallReceived else Icons.Default.Bolt, null, tint = if (h.incoming) Green else Bolt)
+                },
+                headlineContent = { Text(if (vm.hideBalance) "••••• sat" else (if (h.incoming) "+" else "−") + formatSat(h.amountSat), fontWeight = FontWeight.SemiBold) },
+                supportingContent = {
+                    Text(date + (if (h.feeSat > 0) " · poplatek ${h.feeSat} sat" else "") + (if (h.memo.isNotBlank()) " · ${h.memo}" else ""), fontSize = 12.sp)
+                }
+            )
+            HorizontalDivider()
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+    if (help) AlertDialog(
+        onDismissRequest = { help = false },
+        confirmButton = { TextButton(onClick = { help = false }) { Text("Rozumím") } },
+        title = { Text("Jak fungují kanály") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Kanál je společná „kasička“ vašeho uzlu a jednoho protějšku, zajištěná transakcí na blockchainu. Platby se pak jen přesouvají mezi oběma stranami – okamžitě a skoro zdarma.")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(12.dp).clip(CircleShape).background(LocalSide)); Spacer(Modifier.width(8.dp))
+                    Text("Vaše strana – to můžete poslat.", fontWeight = FontWeight.SemiBold)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(12.dp).clip(CircleShape).background(RemoteSide)); Spacer(Modifier.width(8.dp))
+                    Text("Strana protějšku – tolik můžete přijmout.", fontWeight = FontWeight.SemiBold)
+                }
+                Text("Když platíte, posouvá se hranice doleva (vaše strana ubývá, protějšku přibývá). Když přijímáte, posouvá se doprava. Velikost kanálu zůstává stejná.")
+                Text("Kanál, který otevřete vy, je zezačátku celý na vaší straně – proto zatím nemůžete přijímat. Místo pro příjem vznikne, jakmile něco zaplatíte.")
+                Text("Malá část (rezerva, obvykle 1 %) musí na vaší straně zůstat jako pojistka a nejde utratit. Peníze v kanálu jsou pořád vaše – zavřením kanálu se vrátí na uzel.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    )
+}
+
+private val LocalSide = Color(0xFFF7931A)
+private val RemoteSide = Color(0xFF5B8DEF)
+
+private fun parseColor(hex: String?): Color? = runCatching {
+    val h = hex!!.removePrefix("#"); require(h.length == 6); Color(0xFF000000 or h.toLong(16))
+}.getOrNull()
+
+@Composable
+fun ChannelCard(ch: LnChannel, vm: WalletViewModel, openUrl: (String?) -> Unit) {
+    val ctx = LocalContext.current
+    var expanded by remember(ch.channelPoint) { mutableStateOf(false) }
+    val (statusText, statusColor) = when {
+        ch.pending -> "Otevírá se" to HayekOrange
+        ch.active -> "Aktivní · " + (if (ch.private) "soukromý" else "veřejný") to Green
+        else -> "Offline" to MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val usable = ch.active && !ch.pending
+    val dim = if (usable) 1f else 0.4f
+    GlassCard(Modifier.fillMaxWidth().clickable { expanded = !expanded }) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val avatar = parseColor(ch.peerColor)?.takeIf { it != Color.Black } ?: RemoteSide
+                Box(Modifier.size(40.dp).clip(CircleShape).background(avatar.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+                    if (ch.peerAlias.isNullOrBlank()) Icon(Icons.Default.Bolt, null, tint = avatar)
+                    else Text(ch.title.take(1).uppercase(), fontWeight = FontWeight.Bold, color = avatar, fontSize = 18.sp)
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(ch.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(statusColor)); Spacer(Modifier.width(6.dp))
+                        Text(statusText, fontSize = 12.sp, color = statusColor, maxLines = 1)
+                    }
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(vm.amount(ch.capacitySat), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text("velikost", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            // Pruh: vaše strana vs. strana protějšku
+            val total = (ch.localSat + ch.remoteSat).coerceAtLeast(1)
+            val localFrac = (ch.localSat.toFloat() / total).coerceIn(0f, 1f)
+            Box(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp)).background(RemoteSide.copy(alpha = (if (ch.remoteSat > 0) 0.85f else 0.18f) * dim))) {
+                if (localFrac > 0f) Box(
+                    Modifier.fillMaxHeight().fillMaxWidth(localFrac).clip(RoundedCornerShape(7.dp))
+                        .background(Brush.horizontalGradient(listOf(Color(0xFFFFB347).copy(alpha = dim), LocalSide.copy(alpha = dim))))
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Row {
+                Column(Modifier.weight(1f)) {
+                    Text(if (ch.pending) "Vaše strana" else "↑ Můžete poslat", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(vm.amount(if (ch.pending) ch.localSat else ch.canSendSat), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = LocalSide.copy(alpha = maxOf(dim, 0.7f)))
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(if (ch.pending) "Strana protějšku" else "Můžete přijmout ↓", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(vm.amount(ch.canReceiveSat), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = RemoteSide.copy(alpha = maxOf(dim, 0.7f)))
+                }
+            }
+            val hint = when {
+                ch.pending -> "Kanál čeká na potvrzení v blockchainu (obvykle 3–6 bloků, do hodiny). Pak se zapne sám."
+                !ch.active -> "Protějšek je teď nedostupný, kanálem nejde platit. Peníze jsou v bezpečí – spojení se obvykle obnoví samo."
+                ch.canReceiveSat == 0L -> "Na příjem zatím není místo. Uvolní se, jakmile přes tento kanál něco zaplatíte."
+                else -> null
+            }
+            if (hint != null) Row(Modifier.padding(top = 10.dp), verticalAlignment = Alignment.Top) {
+                Icon(if (ch.pending) Icons.Default.HourglassTop else Icons.Default.Info, null, Modifier.size(16.dp),
+                    tint = if (ch.pending) HayekOrange else MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(6.dp))
+                Text(hint, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            AnimatedVisibility(expanded) {
+                Column(Modifier.padding(top = 12.dp)) {
+                    HorizontalDivider(); Spacer(Modifier.height(10.dp))
+                    DetailRow("Otevřel", if (ch.initiator) "vy" else "protějšek")
+                    if (!ch.pending) DetailRow("Rezerva (nelze utratit)", vm.amount(ch.reserveSat))
+                    if (ch.sentSat > 0 || ch.receivedSat > 0) {
+                        DetailRow("Odesláno celkem", vm.amount(ch.sentSat))
+                        DetailRow("Přijato celkem", vm.amount(ch.receivedSat))
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text("Protějšek (veřejný klíč uzlu)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(ch.peerPubkey.chunked(22).joinToString("\n"), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GlassButton(onClick = { copy(ctx, ch.peerPubkey); vm.message = "Klíč protějšku zkopírován." }, Modifier.weight(1f)) {
+                            Icon(Icons.Default.ContentCopy, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Klíč", fontSize = 13.sp)
+                        }
+                        GlassButton(onClick = { openUrl(vm.txLink(ch.fundingTxid)) }, Modifier.weight(1f)) {
+                            Icon(Icons.Default.OpenInNew, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text("Transakce", fontSize = 13.sp)
+                        }
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.Center) {
+                Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, if (expanded) "Méně" else "Podrobnosti",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
 }
 

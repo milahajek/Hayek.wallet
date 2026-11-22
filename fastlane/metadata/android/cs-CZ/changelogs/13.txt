@@ -1,0 +1,1 @@
+⚡ Přehled Lightning kanálů: s kým jste propojeni, velikost kanálu, pruh „můžete poslat / přijmout“, stav (aktivní, otevírá se, offline), podrobnosti a odkaz na otevírací transakci. Vysvětlení, jak kanály fungují.

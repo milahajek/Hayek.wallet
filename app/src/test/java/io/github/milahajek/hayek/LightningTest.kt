@@ -58,6 +58,14 @@ class LightningTest {
         assertFalse(err.ok); assertTrue(err.failure!!.contains("zaplacená"))
     }
 
+    @Test fun channelMath() {
+        val c = LnChannel("03abc", null, null, 500_000, 495_000, 0, 5_000, true, false, false, true, "aa:1")
+        assertEquals(490_000L, c.canSendSat); assertEquals(0L, c.canReceiveSat)
+        assertEquals("aa", c.fundingTxid); assertEquals("03abc…", c.title)
+        assertEquals(0L, c.copy(localSat = 1_000).canSendSat)
+        assertEquals("ACINQ", c.copy(peerAlias = "ACINQ").title)
+    }
+
     // ---- Proti skutečnému LND (spustí se jen s LND_HOST a LND_MAC v prostředí) ----
 
     private fun live(): LndClient {
@@ -80,6 +88,8 @@ class LightningTest {
         val r = c.pay(inv.paymentRequest, 10)
         assertFalse(r.ok); assertTrue(r.failure!!, r.failure!!.contains("vlastního uzlu"))
         c.history()
+        assertTrue(c.channels().isEmpty())
+        assertEquals(null to null, c.nodeAlias("03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f"))
     }
 
     @Test fun livePinMismatch() {

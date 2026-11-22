@@ -1,0 +1,1 @@
+⚡ Lightning channel overview: peer name, channel size, "can send / can receive" bar, status (active, opening, offline), details and link to the funding transaction. Explanation of how channels work.

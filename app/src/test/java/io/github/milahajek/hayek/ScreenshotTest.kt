@@ -96,12 +96,18 @@ class ScreenshotTest {
         vm.lnConfig = lnCfg; vm.connected = true
         vm.lnInfo = LnInfo("Můj uzel", "03e4ba21", 1, true, "0.19.3-beta")
         vm.lnBalance = LnBalance(318_420, 176_300, 0)
+        vm.lnChannels = listOf(
+            LnChannel("03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f", "ACINQ", "#49daaa",
+                500_000, 489_420, 6_300, 5_000, true, false, false, true, "f64b15b83b790824081e6bace83776adeb233395e4b294b03134c6a0dc9c3a31:1",
+                sentSat = 6_300, receivedSat = 0),
+        )
         vm.lnHistory = listOf(
             LnHistoryItem(true, 21_000, 0, 1795710000, "Oběd", "i:3"),
             LnHistoryItem(false, 4_200, 1, 1795700000, "", "p:a"),
             LnHistoryItem(false, 2_100, 0, 1795600000, "", "p:b"),
         )
     }
+    @Config(qualifiers = "w411dp-h1100dp-xxhdpi")
     @Test fun s19_lightning() = shoot("19_lightning") { it.setThemeMode(0); lnState(it); it.screen = Screen.Lightning }
     @Test fun s20_ln_pay() = shoot("20_ln_zaplatit") {
         it.setThemeMode(0); lnState(it)
@@ -126,5 +132,20 @@ class ScreenshotTest {
         it.state = state.copy(txs = listOf(pendingOut) + state.txs); it.connected = true
         it.setNote(pendingOut.txid, "Nájem – listopad")
         it.screen = Screen.Home; it.txDetail = pendingOut
+    }
+
+    @Config(qualifiers = "w411dp-h1100dp-xxhdpi")
+    @Test fun s29_channels_new() = shoot("29_kanal_novy") {
+        it.setThemeMode(2); lnState(it); it.lnHistory = emptyList()
+        it.lnBalance = LnBalance(495_000, 0, 0)
+        it.lnChannels = listOf(
+            LnChannel("03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f", "ACINQ", "#49daaa",
+                500_000, 495_000, 0, 5_000, true, false, false, true, "f64b15b83b790824081e6bace83776adeb233395e4b294b03134c6a0dc9c3a31:1"),
+            LnChannel("02d96eadea3d780104449aca5c93461ce67c1564e2e1d73225fa67dd3b997a6018", "Bitrefill", "#ff7a00",
+                300_000, 300_000, 0, 0, false, true, false, true, "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678a1b2c3d4e5f6071829304a5b:0"),
+            LnChannel("0298f6074a454a1f5345cb2a7c6f9fce206cd0bf675d177cdbf0ca7508dd28852f", null, null,
+                200_000, 120_000, 80_000, 2_000, false, false, true, false, "b1b2c3d4e5f60718293a4b5c6d7e8f9012345678a1b2c3d4e5f6071829304a5b:1"),
+        )
+        it.screen = Screen.Lightning
     }
 }

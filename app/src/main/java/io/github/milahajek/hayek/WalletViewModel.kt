@@ -402,6 +402,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     var lnInfo by mutableStateOf<LnInfo?>(null)
     var lnBalance by mutableStateOf<LnBalance?>(null)
     var lnHistory by mutableStateOf<List<LnHistoryItem>>(emptyList())
+    var lnChannels by mutableStateOf<List<LnChannel>?>(null)
     var lnError by mutableStateOf<String?>(null)
     var lnDecoded by mutableStateOf<LnDecoded?>(null)
     var lnInvoice by mutableStateOf<LnInvoice?>(null)
@@ -443,6 +444,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             val c = lnClient(cfg)
             val (i, b, h) = withContext(Dispatchers.IO) { Triple(c.info(), c.balance(), runCatching { c.history() }.getOrDefault(emptyList())) }
             lnInfo = i; lnBalance = b; lnHistory = h; lnError = null
+            lnChannels = withContext(Dispatchers.IO) { runCatching { c.channels() }.getOrNull() } ?: lnChannels
         } catch (e: Exception) {
             lnError = lnFriendly(e)
         }
@@ -476,7 +478,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun lnClear() {
         pollJob?.cancel(); pollJob = null
-        lnConfig = null; lnInfo = null; lnBalance = null; lnHistory = emptyList()
+        lnConfig = null; lnInfo = null; lnBalance = null; lnHistory = emptyList(); lnChannels = null
         lnDecoded = null; lnInvoice = null; lnInvoicePaid = false; lnError = null
     }
 

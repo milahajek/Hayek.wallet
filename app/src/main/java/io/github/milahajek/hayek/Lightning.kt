@@ -91,6 +91,30 @@ data class LnDecoded(
 }
 data class LnPayResult(val ok: Boolean, val feeSat: Long, val preimage: String?, val failure: String?)
 data class LnInvoice(val paymentRequest: String, val rHashHex: String, val amountSat: Long, val memo: String)
+/** Jeden kanál Lightning uzlu, jak ho vidí uživatel. */
+data class LnChannel(
+    val peerPubkey: String,
+    val peerAlias: String?,
+    val peerColor: String?,
+    val capacitySat: Long,
+    val localSat: Long,
+    val remoteSat: Long,
+    /** Rezerva, kterou protokol drží na vaší straně – nejde utratit. */
+    val reserveSat: Long,
+    val active: Boolean,
+    val pending: Boolean,
+    val private: Boolean,
+    val initiator: Boolean,
+    val channelPoint: String,
+    val sentSat: Long = 0,
+    val receivedSat: Long = 0,
+) {
+    val fundingTxid get() = channelPoint.substringBefore(":")
+    val canSendSat get() = maxOf(0L, localSat - reserveSat)
+    val canReceiveSat get() = remoteSat
+    val title get() = peerAlias?.takeIf { it.isNotBlank() && it != peerPubkey.take(20) } ?: (peerPubkey.take(10) + "…")
+}
+
 data class LnHistoryItem(val incoming: Boolean, val amountSat: Long, val feeSat: Long, val time: Long, val memo: String, val id: String)
 
 class LndClient(val config: LndConfig, private val pins: PinStore) {
@@ -174,6 +198,53 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
         return LnBalance(sat("local_balance"), sat("remote_balance"), sat("pending_open_local_balance"))
     }
 
+    /** Jméno a barva uzlu z mapy sítě (null, pokud ho uzel ještě nezná). */
+    fun nodeAlias(pubkey: String): Pair<String?, String?> = aliasCache[pubkey] ?: try {
+        val n = JSONObject(request("GET", "/v1/graph/node/$pubkey?include_channels=false")).optJSONObject("node")
+        ((n?.optString("alias")?.takeIf { it.isNotBlank() }) to n?.optString("color")).also { if (it.first != null) aliasCache[pubkey] = it }
+    } catch (e: LndException) {
+        null to null
+    }
+
+    /** Otevřené i otevírající se kanály. */
+    fun channels(): List<LnChannel> {
+        val out = mutableListOf<LnChannel>()
+        val open = JSONObject(request("GET", "/v1/channels")).optJSONArray("channels")
+        for (i in 0 until (open?.length() ?: 0)) {
+            val c = open!!.getJSONObject(i)
+            val pk = c.optString("remote_pubkey")
+            val (alias, color) = nodeAlias(pk)
+            out += LnChannel(
+                peerPubkey = pk, peerAlias = alias, peerColor = color,
+                capacitySat = c.optString("capacity").toLongOrNull() ?: 0,
+                localSat = c.optString("local_balance").toLongOrNull() ?: 0,
+                remoteSat = c.optString("remote_balance").toLongOrNull() ?: 0,
+                reserveSat = c.optJSONObject("local_constraints")?.optString("chan_reserve_sat")?.toLongOrNull() ?: 0,
+                active = c.optBoolean("active"), pending = false,
+                private = c.optBoolean("private"), initiator = c.optBoolean("initiator"),
+                channelPoint = c.optString("channel_point"),
+                sentSat = c.optString("total_satoshis_sent").toLongOrNull() ?: 0,
+                receivedSat = c.optString("total_satoshis_received").toLongOrNull() ?: 0,
+            )
+        }
+        val pend = JSONObject(request("GET", "/v1/channels/pending")).optJSONArray("pending_open_channels")
+        for (i in 0 until (pend?.length() ?: 0)) {
+            val c = pend!!.getJSONObject(i).optJSONObject("channel") ?: continue
+            val pk = c.optString("remote_node_pub")
+            val (alias, color) = nodeAlias(pk)
+            out += LnChannel(
+                peerPubkey = pk, peerAlias = alias, peerColor = color,
+                capacitySat = c.optString("capacity").toLongOrNull() ?: 0,
+                localSat = c.optString("local_balance").toLongOrNull() ?: 0,
+                remoteSat = c.optString("remote_balance").toLongOrNull() ?: 0,
+                reserveSat = 0, active = false, pending = true,
+                private = c.optBoolean("private"), initiator = c.optString("initiator") == "INITIATOR_LOCAL",
+                channelPoint = c.optString("channel_point"),
+            )
+        }
+        return out.sortedWith(compareBy({ it.pending }, { !it.active }, { -it.capacitySat }))
+    }
+
     fun decode(paymentRequest: String): LnDecoded {
         val pr = cleanInvoice(paymentRequest)
         val j = JSONObject(request("GET", "/v1/payreq/" + URLEncoder.encode(pr, "UTF-8")))
@@ -243,6 +314,9 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
     }
 
     companion object {
+        /** Jména uzlů se mění zřídka – pamatujeme si je po dobu běhu aplikace. */
+        private val aliasCache = java.util.concurrent.ConcurrentHashMap<String, Pair<String?, String?>>()
+
         /** Odstraní předponu lightning: a mezery; QR kódy bývají velkými písmeny. */
         fun cleanInvoice(raw: String): String {
             var s = raw.trim()
