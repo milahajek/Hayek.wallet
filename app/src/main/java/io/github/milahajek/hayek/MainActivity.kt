@@ -554,20 +554,48 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
     var to by remember { mutableStateOf(vm.sendPrefill.also { vm.sendPrefill = "" }) }
     var amount by remember { mutableStateOf("") }
     var all by remember { mutableStateOf(false) }
+    var scanning by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
     val p = vm.prepared
+    if (scanning) QrScanDialog("Načíst adresu příjemce", onDismiss = { scanning = false }, onResult = { raw ->
+        scanning = false
+        val req = parsePaymentQr(raw)
+        if (req == null) {
+            vm.message = if (raw.trim().lowercase().let { it.startsWith("lightning:") || it.startsWith("lnbc") || it.startsWith("lnurl") })
+                "Tohle je Lightning platba. Hayek Wallet umí jen běžné (on-chain) bitcoinové adresy."
+            else "QR kód neobsahuje bitcoinovou adresu:\n\n${raw.take(200)}"
+        } else {
+            to = req.address
+            req.amountSat?.let { amount = it.toString(); all = false }
+            note = listOfNotNull(
+                req.label?.let { "Popis: $it" },
+                req.amountSat?.let { "Částka převzata z QR kódu – zkontrolujte ji." }
+            ).joinToString("\n").ifEmpty { null }
+            vm.prepared = null
+        }
+    })
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text("Odeslat", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Text("K dispozici: ${formatSat(vm.coins.filter { !it.frozen }.sumOf { it.valueSat })}" +
             if (vm.coins.any { it.frozen }) " (bez zmrazených)" else "", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(
-            value = to, onValueChange = { to = it.trim().removePrefix("bitcoin:").substringBefore("?"); vm.prepared = null },
-            label = { Text("Adresa příjemce (bc1… / 1… / 3…)") }, modifier = Modifier.fillMaxWidth(),
+            value = to, onValueChange = { to = it.trim().removePrefix("bitcoin:").substringBefore("?"); note = null; vm.prepared = null },
+            label = { Text("Adresa příjemce") }, placeholder = { Text("bc1… / 1… / 3…") }, modifier = Modifier.fillMaxWidth(),
             trailingIcon = {
-                IconButton(onClick = { paste(ctx)?.let { to = it.trim().removePrefix("bitcoin:").substringBefore("?"); vm.prepared = null } }) {
-                    Icon(Icons.Default.ContentPaste, "Vložit")
+                Row {
+                    IconButton(onClick = { scanning = true }) { Icon(Icons.Default.QrCodeScanner, "Načíst QR kód") }
+                    IconButton(onClick = {
+                        paste(ctx)?.let { raw ->
+                            val req = parsePaymentQr(raw)
+                            to = req?.address ?: raw.trim().removePrefix("bitcoin:").substringBefore("?")
+                            req?.amountSat?.let { amount = it.toString(); all = false }
+                            note = null; vm.prepared = null
+                        }
+                    }) { Icon(Icons.Default.ContentPaste, "Vložit") }
                 }
-            }
+            },
+            supportingText = note?.let { n -> { Text(n) } }
         )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
@@ -869,6 +897,13 @@ fun paste(ctx: Context): String? {
 fun WatchImportScreen(vm: WalletViewModel, act: FragmentActivity) {
     val ctx = LocalContext.current
     var text by remember { mutableStateOf("") }
+    var scanning by remember { mutableStateOf(false) }
+    if (scanning) QrScanDialog("Načíst veřejný klíč", onDismiss = { scanning = false }, onResult = { raw ->
+        scanning = false
+        if (raw.trim().lowercase().startsWith("ur:")) vm.message =
+            "Tohle je animovaný QR kód (formát UR), ten zatím neumím. V druhé peněžence zvolte export jako text / xpub, nebo klíč zkopírujte."
+        else text = raw.trim()
+    })
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text("Jen sledovat peněženku", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Text(
@@ -881,7 +916,12 @@ fun WatchImportScreen(vm: WalletViewModel, act: FragmentActivity) {
             value = text, onValueChange = { text = it }, label = { Text("zpub… nebo wpkh([…]xpub…/0/*)") },
             modifier = Modifier.fillMaxWidth().height(170.dp),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false),
-            trailingIcon = { IconButton(onClick = { paste(ctx)?.let { text = it.trim() } }) { Icon(Icons.Default.ContentPaste, "Vložit") } }
+            trailingIcon = {
+                Row {
+                    IconButton(onClick = { scanning = true }) { Icon(Icons.Default.QrCodeScanner, "Načíst QR kód") }
+                    IconButton(onClick = { paste(ctx)?.let { text = it.trim() } }) { Icon(Icons.Default.ContentPaste, "Vložit") }
+                }
+            }
         )
         Spacer(Modifier.height(16.dp))
         HayekButton(onClick = {

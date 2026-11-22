@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.milahajek.hayek"
         minSdk = 30
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.2.2"
+        versionCode = 10
+        versionName = "1.3.0"
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 
@@ -57,6 +57,9 @@ dependencies {
     testImplementation("androidx.test.ext:junit:1.2.1")
     implementation("org.bitcoindevkit:bdk-android:3.1.1")
     implementation("com.google.zxing:core:3.5.3")
+    implementation("androidx.camera:camera-camera2:1.5.3")
+    implementation("androidx.camera:camera-lifecycle:1.5.3")
+    implementation("androidx.camera:camera-view:1.5.3")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.fragment:fragment-ktx:1.8.9")
     implementation(platform("androidx.compose:compose-bom:2025.10.01"))

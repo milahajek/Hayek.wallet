@@ -1,0 +1,1 @@
+Skenování QR kódů fotoaparátem: adresa příjemce (včetně částky z platebního QR) a veřejný klíč pro sledování. Obraz se zpracovává jen v telefonu.

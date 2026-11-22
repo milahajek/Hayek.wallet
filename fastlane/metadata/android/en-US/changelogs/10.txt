@@ -1,0 +1,1 @@
+Scan QR codes with the camera: recipient address (including the amount from payment QR codes) and public key for watch-only. Images are processed only on the phone.
