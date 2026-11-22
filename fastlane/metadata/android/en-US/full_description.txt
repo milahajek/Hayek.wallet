@@ -1,0 +1,13 @@
+<p>Hayek Wallet is a self-custodial Bitcoin wallet for people who run their own node. It connects <b>only</b> to your own Electrum server (Fulcrum or ElectRS) and creates new wallets <b>only from dice rolls</b>.</p>
+<p><b>Experimental, unaudited software – use with small amounts only. The user interface is currently in Czech.</b></p>
+<ul>
+<li>24-word BIP39 seed from 99+ rolls of a six-sided die (SHA-256 of the rolls, same method as Coldcard and SeedSigner – independently verifiable)</li>
+<li>No default or fallback public servers; mainnet check of the server</li>
+<li>Standard BIP84 native SegWit addresses – restore in any common wallet</li>
+<li>Coin control: choose which coins to spend, freeze coins</li>
+<li>Watch-only mode (zpub/ypub/xpub or descriptor) and public descriptor export</li>
+<li>Seed encrypted with Android Keystore, biometric/PIN unlock and payment confirmation, auto-lock, screenshots blocked, incognito keyboard for seed words, backup check</li>
+<li>Transaction links open in your own Mempool instance</li>
+<li>No analytics, no ads, no telemetry</li>
+</ul>
+<p>Requires Android 11+, a screen lock, and your own Bitcoin node with an Electrum server reachable from the phone (home network or VPN).</p>

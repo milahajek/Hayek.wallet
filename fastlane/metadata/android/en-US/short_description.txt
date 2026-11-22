@@ -1,0 +1,1 @@
+Bitcoin wallet for your own node, with seed generated from dice rolls

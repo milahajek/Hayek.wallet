@@ -1,0 +1,26 @@
+# Návrh metadat pro F-Droid (posílá se jako merge request do gitlab.com/fdroid/fdroiddata,
+# soubor metadata/io.github.milahajek.hayek.yml). Před odesláním ověřit hash commitu/tagu.
+Categories:
+  - Money
+License: GPL-3.0-or-later
+AuthorName: milahajek
+SourceCode: https://github.com/milahajek/HODL-Wallet
+IssueTracker: https://github.com/milahajek/HODL-Wallet/issues
+
+AutoName: Hayek Wallet
+
+RepoType: git
+Repo: https://github.com/milahajek/HODL-Wallet.git
+
+Builds:
+  - versionName: '1.0'
+    versionCode: 1
+    commit: v1.0
+    subdir: app
+    gradle:
+      - yes
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: '1.0'
+CurrentVersionCode: 1

@@ -1,0 +1,19 @@
+# Sestavení
+build/
+.gradle/
+.kotlin/
+*.apk
+*.aab
+
+# Místní nastavení
+local.properties
+.idea/
+*.iml
+.DS_Store
+
+# Podpisové klíče a hesla – NIKDY do repozitáře
+*.jks
+*.keystore
+*.p12
+keystore.properties
+.ks_pass*

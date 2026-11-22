@@ -1,0 +1,13 @@
+<p>Hayek Wallet je bitcoinová peněženka pro lidi, kteří provozují vlastní uzel. Připojuje se <b>výhradně</b> k vašemu Electrum serveru (Fulcrum nebo ElectRS) a nové peněženky vytváří <b>jen z hodů kostkou</b>.</p>
+<p><b>Experimentální software bez auditu – používejte jen na malé částky.</b></p>
+<ul>
+<li>24 slov (BIP39) z 99 a více hodů šestistěnnou kostkou (SHA-256 z hodů, stejná metoda jako Coldcard a SeedSigner – lze nezávisle ověřit)</li>
+<li>Žádný výchozí ani záložní veřejný server, kontrola, že server je mainnet</li>
+<li>Standardní adresy BIP84 – peněženku obnovíte v jakékoli běžné peněžence</li>
+<li>Coin control: výběr mincí k utracení a jejich zmrazení</li>
+<li>Sledovací režim (zpub/ypub/xpub nebo deskriptor) a export veřejného deskriptoru</li>
+<li>Fráze šifrovaná v Android Keystore, odemykání a potvrzení plateb otiskem/PINem, automatické zamčení, zákaz snímků obrazovky, anonymní klávesnice pro slova, kontrola zálohy</li>
+<li>Odkazy na transakce vedou do vašeho vlastního Mempoolu</li>
+<li>Žádná analytika, reklamy ani telemetrie</li>
+</ul>
+<p>Vyžaduje Android 11+, zámek obrazovky a vlastní bitcoinový uzel s Electrum serverem dostupný z telefonu (domácí síť nebo VPN).</p>
