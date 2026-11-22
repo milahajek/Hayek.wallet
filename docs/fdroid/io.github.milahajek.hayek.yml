@@ -1,7 +1,7 @@
-# Návrh metadat pro F-Droid (posílá se jako merge request do gitlab.com/fdroid/fdroiddata,
-# soubor metadata/io.github.milahajek.hayek.yml). Před odesláním ověřit hash commitu/tagu.
+# Metadata pro F-Droid (posílá se jako merge request do gitlab.com/fdroid/fdroiddata,
+# soubor metadata/io.github.milahajek.hayek.yml). Ověřeno: fdroid lint + fdroid build 1.2.1 OK.
 Categories:
-  - Money
+  - Wallet
 License: GPL-3.0-or-later
 AuthorName: milahajek
 SourceCode: https://github.com/milahajek/Hayek.wallet
