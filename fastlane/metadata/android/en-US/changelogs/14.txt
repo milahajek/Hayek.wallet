@@ -1,0 +1,1 @@
+Fee choice Slow / Normal / Fast based on your node – each shows sat/vB, estimated time and approximate cost. Custom fee still available. Same when speeding up a transaction.

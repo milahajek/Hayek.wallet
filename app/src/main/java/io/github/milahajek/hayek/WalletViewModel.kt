@@ -88,8 +88,9 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         txDetail = tx; bumpPrepared = null; bumpSuggested = null
         val c = core ?: return
         if (tx.canBump) viewModelScope.launch {
-            val r = try { lock.withLock { withContext(Dispatchers.IO) { c.suggestedFeeRate() } } } catch (_: Exception) { 2L }
-            bumpSuggested = maxOf(r, (tx.feeRate ?: 1) + 1)
+            val e = loadFeeEstimates()
+            feeEstimates = e
+            bumpSuggested = maxOf(e?.fast ?: 2L, (tx.feeRate ?: 1) + 1)
         }
     }
 
@@ -115,6 +116,19 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     var message by mutableStateOf<String?>(null)
     var prepared by mutableStateOf<PreparedTx?>(null)
     var feeRate by mutableStateOf("2")
+    var feeEstimates by mutableStateOf<FeeEstimates?>(null)
+    var feeChoice by mutableStateOf(FeeChoice.NORMAL)
+
+    fun chooseFee(choice: FeeChoice) {
+        feeChoice = choice
+        feeEstimates?.rate(choice)?.let { feeRate = it.toString() }
+        prepared = null
+    }
+
+    private suspend fun loadFeeEstimates(): FeeEstimates? {
+        val c = core ?: return null
+        return try { lock.withLock { withContext(Dispatchers.IO) { c.feeEstimates() } } } catch (_: Exception) { null }
+    }
     var rolls by mutableStateOf("")
     var revealSeed by mutableStateOf(false)
     var connected by mutableStateOf<Boolean?>(null)
@@ -328,8 +342,10 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         screen = Screen.Send
         val c = core ?: return
         viewModelScope.launch {
-            val r = try { lock.withLock { withContext(Dispatchers.IO) { c.suggestedFeeRate() } } } catch (_: Exception) { 2L }
-            feeRate = r.toString()
+            val e = loadFeeEstimates()
+            feeEstimates = e
+            if (e == null) { feeChoice = FeeChoice.CUSTOM; feeRate = "2" }
+            else { if (feeChoice == FeeChoice.CUSTOM) feeChoice = FeeChoice.NORMAL; feeRate = e.rate(feeChoice).toString() }
         }
     }
 

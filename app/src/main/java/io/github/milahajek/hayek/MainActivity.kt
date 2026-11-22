@@ -651,11 +651,10 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
             }
         }
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = vm.feeRate, onValueChange = { vm.feeRate = it.filter(Char::isDigit); vm.prepared = null },
-            label = { Text("Poplatek (sat/vB)") }, modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            supportingText = { Text("Předvyplněno podle vašeho uzlu (potvrzení do ~1 hodiny)") }
+        FeePicker(
+            estimates = vm.feeEstimates, choice = vm.feeChoice, rate = vm.feeRate,
+            onChoice = { vm.chooseFee(it) }, onCustomRate = { vm.feeRate = it; vm.prepared = null },
+            loading = vm.feeEstimates == null && vm.connected != false
         )
         Spacer(Modifier.height(16.dp))
         if (p == null) {

@@ -29,7 +29,15 @@ fun TxDetailDialog(tx: TxItem, vm: WalletViewModel, act: FragmentActivity) {
     var note by remember(tx.txid) { mutableStateOf(vm.note(tx.txid)) }
     var bumping by remember(tx.txid) { mutableStateOf(false) }
     var rate by remember(tx.txid) { mutableStateOf("") }
-    LaunchedEffect(vm.bumpSuggested) { if (rate.isBlank()) vm.bumpSuggested?.let { rate = it.toString() } }
+    var bumpChoice by remember(tx.txid) { mutableStateOf(FeeChoice.FAST) }
+    LaunchedEffect(vm.bumpSuggested) {
+        val sug = vm.bumpSuggested ?: return@LaunchedEffect
+        if (rate.isBlank()) {
+            val fast = vm.feeEstimates?.fast
+            if (fast != null && fast >= sug) { bumpChoice = FeeChoice.FAST; rate = fast.toString() }
+            else { bumpChoice = FeeChoice.CUSTOM; rate = sug.toString() }
+        }
+    }
     val incoming = tx.deltaSat >= 0
     val b = vm.bumpPrepared
     fun close() { vm.setNote(tx.txid, note); vm.txDetail = null; vm.bumpPrepared = null }
@@ -70,11 +78,14 @@ fun TxDetailDialog(tx: TxItem, vm: WalletViewModel, act: FragmentActivity) {
                 }
                 if (bumping && b == null) {
                     Spacer(Modifier.height(12.dp))
-                    Text("Nový poplatek", fontWeight = FontWeight.SemiBold)
-                    Text("Teď: ${tx.feeRate ?: "?"} sat/vB" + (vm.bumpSuggested?.let { " · doporučeno vaším uzlem: $it sat/vB" } ?: ""), fontSize = 13.sp)
-                    OutlinedTextField(
-                        value = rate, onValueChange = { rate = it.filter(Char::isDigit) }, label = { Text("sat/vB") },
-                        singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    Text("Teď zaplaceno: ${tx.feeRate ?: "?"} sat/vB. Nový poplatek musí být vyšší.", fontSize = 13.sp)
+                    Spacer(Modifier.height(8.dp))
+                    val minRate = (tx.feeRate ?: 1) + 1
+                    FeePicker(
+                        estimates = vm.feeEstimates, choice = bumpChoice, rate = rate, minRate = minRate,
+                        onChoice = { c -> bumpChoice = c; vm.feeEstimates?.rate(c)?.let { rate = it.toString() } },
+                        onCustomRate = { rate = it },
+                        loading = vm.bumpSuggested == null
                     )
                     Spacer(Modifier.height(8.dp))
                     HayekButton(onClick = { vm.prepareBump(rate) }, enabled = rate.isNotBlank() && !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("Spočítat") }

@@ -1,0 +1,1 @@
+Volba poplatku Levně / Normálně / Rychle podle vašeho uzlu – u každé je vidět sat/vB, odhad času a přibližná cena platby. Stále lze zadat vlastní poplatek. Totéž při urychlení transakce.

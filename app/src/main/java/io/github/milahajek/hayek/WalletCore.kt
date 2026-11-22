@@ -67,6 +67,18 @@ data class TxItem(
     val canBump: Boolean = false,
 )
 
+/** Doporučené poplatky v sat/vB. */
+data class FeeEstimates(val fast: Long, val normal: Long, val slow: Long) {
+    fun rate(choice: FeeChoice) = when (choice) { FeeChoice.FAST -> fast; FeeChoice.NORMAL -> normal; FeeChoice.SLOW -> slow; FeeChoice.CUSTOM -> null }
+}
+
+enum class FeeChoice(val title: String, val eta: String) {
+    FAST("Rychle", "~20 min"), NORMAL("Normálně", "~1 hodina"), SLOW("Levně", "~1 den"), CUSTOM("Vlastní", "")
+}
+
+/** Velikost běžné platby (1 vstup, 2 výstupy, SegWit) ve vB – pro orientační odhad poplatku. */
+const val TYPICAL_TX_VBYTES = 141
+
 /** Připravené urychlení (RBF): nová transakce nahrazující původní. */
 data class PreparedBump(val psbt: Psbt, val oldTxid: String, val oldFeeSat: Long, val newFeeSat: Long, val feeRate: Long, val recipientSat: Long)
 
@@ -417,6 +429,21 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
         wallet.applyUnconfirmedTxs(listOf(UnconfirmedTx(tx, (System.currentTimeMillis() / 1000).toULong())))
         wallet.persist(persister)
         return newId
+    }
+
+    /**
+     * Odhady poplatků z vlastního uzlu (Bitcoin Core estimatesmartfee přes Electrum server).
+     * Rychle = do 2 bloků (~20 min), Normálně = do 6 bloků (~1 h), Levně = do 144 bloků (~1 den).
+     */
+    fun feeEstimates(): FeeEstimates {
+        fun est(blocks: Long): Long? = try {
+            val btcPerKb = withClient { it.estimateFee(blocks.toULong()) }
+            if (btcPerKb <= 0) null else kotlin.math.ceil(btcPerKb * 100_000_000 / 1000).toLong().coerceAtLeast(1)
+        } catch (e: Exception) { null }
+        val slow = est(144) ?: 1
+        val normal = maxOf(est(6) ?: slow, slow)
+        val fast = maxOf(est(2) ?: normal, normal)
+        return FeeEstimates(fast, normal, slow)
     }
 
     /** Doporučený poplatek z vlastního uzlu (sat/vB) pro potvrzení do ~6 bloků. */

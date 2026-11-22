@@ -48,7 +48,8 @@ class ScreenshotTest {
     )
 
     @Test fun s8_coins() = shoot("8_mince") { it.state = state; it.coins = coins; it.connected = true; it.selected = setOf(coins[0].id); it.screen = Screen.Coins }
-    @Test fun s9_send_cc() = shoot("9_odeslat_coincontrol") { it.state = state; it.coins = coins; it.connected = true; it.selected = setOf(coins[0].id); it.feeRate = "4"; it.screen = Screen.Send }
+    @Config(qualifiers = "w411dp-h1000dp-xxhdpi")
+    @Test fun s9_send_cc() = shoot("9_odeslat_coincontrol") { it.setThemeMode(2); it.state = state; it.coins = coins; it.connected = true; it.selected = setOf(coins[0].id); it.feeEstimates = FeeEstimates(12, 6, 2); it.chooseFee(FeeChoice.CUSTOM); it.feeRate = "1"; it.screen = Screen.Send }
     @Test fun s10_dark_home() = shoot("10_tmavy_rezim") { it.setThemeMode(2); it.state = state; it.coins = coins; it.connected = true; it.screen = Screen.Home }
     @Test fun s11_watch() = shoot("11_sledovani") { it.setThemeMode(0); it.screen = Screen.WatchImport }
     @Test fun s12_settings_dark() = shoot("12_nastaveni_tmave") { it.setThemeMode(2); it.connected = true; it.screen = Screen.Settings }
@@ -88,7 +89,8 @@ class ScreenshotTest {
     @Test fun s3_seed() = shoot("3_slova") { it.screen = Screen.ShowSeed(fakeWords) }
     @Test fun s4_home() = shoot("4_penezenka") { it.setThemeMode(0); it.state = state; it.coins = coins; it.connected = true; it.screen = Screen.Home }
     @Test fun s5_receive() = shoot("5_prijmout") { it.state = state; it.connected = true; it.screen = Screen.Receive }
-    @Test fun s6_send() = shoot("6_odeslat") { it.state = state; it.connected = true; it.feeRate = "4"; it.screen = Screen.Send }
+    @Config(qualifiers = "w411dp-h1000dp-xxhdpi")
+    @Test fun s6_send() = shoot("6_odeslat") { it.state = state; it.connected = true; it.feeEstimates = FeeEstimates(12, 6, 2); it.chooseFee(FeeChoice.NORMAL); it.screen = Screen.Send }
     @Test fun s7_settings() = shoot("7_nastaveni") { it.connected = true; it.setServer("ssl://192.168.0.10:50002"); it.screen = Screen.Settings }
 
     private val lnCfg = LndConfig("192.168.0.10:8080", "02".repeat(80))
