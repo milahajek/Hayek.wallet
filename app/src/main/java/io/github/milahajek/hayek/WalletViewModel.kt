@@ -70,6 +70,25 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     var serverUrl by mutableStateOf(prefs.getString("server", DEFAULT_SERVER) ?: DEFAULT_SERVER)
         private set
 
+    /** Uložené otisky certifikátů uzlů (veřejné údaje, nejsou tajné). */
+    val pins = object : PinStore {
+        override fun get(hostPort: String) = prefs.getString("pin:$hostPort", null)
+        override fun set(hostPort: String, fingerprint: String) {
+            prefs.edit().putString("pin:$hostPort", fingerprint).apply()
+        }
+    }
+
+    /** Otisk certifikátu uloženého pro aktuální server (null = zatím žádný nebo tcp). */
+    fun pinnedFingerprint(url: String = serverUrl): String? =
+        runCatching { ServerAddr.parse(url) }.getOrNull()?.takeIf { it.ssl }?.let { pins.get(it.hostPort) }
+
+    /** Zapomene uložený certifikát – při příštím spojení se uloží nový. */
+    fun forgetPin(url: String = serverUrl) {
+        runCatching { ServerAddr.parse(url) }.getOrNull()?.let { prefs.edit().remove("pin:${it.hostPort}").apply() }
+        pinVersion++
+    }
+    var pinVersion by mutableStateOf(0)
+
     val seedWords: String? get() = core?.mnemonicWords
     val isOpen get() = core != null
     val watchOnly get() = core?.watchOnly == true
@@ -91,6 +110,12 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun friendly(e: Exception): String {
+        if (e is CertMismatchException) {
+            return "⚠ CERTIFIKÁT UZLU SE ZMĚNIL – spojení odmítnuto.\n\n" +
+                "Server ${e.hostPort} se prokázal jiným certifikátem než minule. Může to znamenat, že se někdo v síti vydává za váš uzel.\n\n" +
+                "Pokud jste na uzlu certifikát sami změnili (reinstalace, aktualizace Fulcrumu/RaspiBlitzu), můžete v ⚙ Nastavení zvolit „Zapomenout certifikát“. Jinak se nepřipojujte.\n\n" +
+                "Uložený: ${e.expected.take(23)}…\nNový:      ${e.actual.take(23)}…"
+        }
         val m = e.message.orEmpty()
         val cls = e::class.simpleName.orEmpty()
         return when {
@@ -116,7 +141,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun open(words: String) {
-        val c = withContext(Dispatchers.IO) { WalletCore(dbFile, words, serverUrl) }
+        val c = withContext(Dispatchers.IO) { WalletCore(dbFile, words, serverUrl, pins) }
         core = c
         screen = Screen.Home
         state = withContext(Dispatchers.IO) { c.state() }
@@ -180,6 +205,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                 selected = selected.filter { id -> coins.any { it.id == id && !it.frozen } }.toSet()
             }
             connected = true
+            pinVersion++
         } catch (e: Exception) {
             connected = false
             throw e
@@ -258,7 +284,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun testServer(url: String) = run {
-        message = withContext(Dispatchers.IO) { io.github.milahajek.hayek.testServer(url.trim()) }
+        message = withContext(Dispatchers.IO) { io.github.milahajek.hayek.testServer(url.trim(), pins).also { pinVersion++ } }
     }
 
     fun lockApp() {

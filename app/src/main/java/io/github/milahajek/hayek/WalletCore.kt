@@ -153,29 +153,42 @@ object Seed {
     }
 }
 
-/** Připojení k vlastnímu Electrum serveru (Electrs / Fulcrum na RaspiBlitzu). */
-fun connect(url: String): ElectrumClient {
-    val u = url.trim()
-    if (u.isBlank()) throw IllegalStateException(NO_SERVER)
-    // Uzel doma používá certifikát podepsaný sám sebou, proto bez ověření domény.
-    val client = ElectrumClient(u, null, 20.toUByte(), 2.toUByte(), false)
+/**
+ * Připojení k vlastnímu Electrum serveru (Fulcrum / ElectRS).
+ * U ssl:// se certifikát uzlu kontroluje proti uloženému otisku (viz CertPinning.kt).
+ */
+fun connect(url: String, pins: PinStore): ElectrumClient {
+    if (url.isBlank()) throw IllegalStateException(NO_SERVER)
+    val addr = ServerAddr.parse(url)
+    val proxy = if (addr.ssl) PinnedTlsProxy.forServer(addr.host, addr.port, pins) else null
+    val target = if (proxy != null) "tcp://127.0.0.1:${proxy.localPort}" else "tcp://${addr.hostPort}"
+    proxy?.lastMismatch = null
+    val client = try {
+        ElectrumClient(target, null, 20.toUByte(), 2.toUByte(), false).also { it.serverFeatures() }
+    } catch (e: Exception) {
+        proxy?.lastMismatch?.let { throw it }
+        throw e
+    }
     val genesis = client.serverFeatures().genesisHash.toString()
     check(genesis == MAINNET_GENESIS) { "Server není Bitcoin mainnet – odmítám se připojit." }
     return client
 }
 
-/** Ověří spojení a vrátí výšku posledního bloku. */
-fun testServer(url: String): String {
-    val c = connect(url)
+/** Ověří spojení a vrátí popis pro uživatele. */
+fun testServer(url: String, pins: PinStore): String {
+    val c = connect(url, pins)
     val tip = c.blockHeadersSubscribe().height
     val ver = c.serverFeatures().serverVersion
-    return "Spojeno ✔\n$ver\nPoslední blok: $tip"
+    val addr = ServerAddr.parse(url)
+    val sec = if (addr.ssl) "Šifrováno, certifikát ověřen:\n${pins.get(addr.hostPort)?.take(23)}…"
+    else "⚠ Nešifrované spojení (tcp). Doporučujeme ssl://."
+    return "Spojeno ✔\n$ver\nPoslední blok: $tip\n\n$sec"
 }
 
 /**
  * Veškerá práce s BDK. Nevolat z hlavního vlákna (síť i disk).
  */
-class WalletCore(private val dbFile: File, val secret: String, var serverUrl: String) {
+class WalletCore(private val dbFile: File, val secret: String, var serverUrl: String, private val pins: PinStore) {
 
     companion object {
         const val WATCH_PREFIX = "watch:"
@@ -213,7 +226,7 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
     private fun client(): ElectrumClient {
         val c = client
         if (c != null && clientUrl == serverUrl) return c
-        val n = connect(serverUrl)
+        val n = connect(serverUrl, pins)
         client = n; clientUrl = serverUrl
         return n
     }

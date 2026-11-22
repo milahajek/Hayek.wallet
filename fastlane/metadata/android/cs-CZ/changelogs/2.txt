@@ -1,0 +1,4 @@
+Bezpečnostní aktualizace:
+- Certifikát uzlu se při prvním spojení připne, jiný certifikát peněženka odmítne (ochrana proti podvrženému uzlu).
+- Odeslání platby, zobrazení slov a smazání peněženky vyžadují otisk prstu (PIN jen když telefon otisk nemá).
+- Peněženka se zamkne po 5 minutách nečinnosti.

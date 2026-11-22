@@ -1,0 +1,4 @@
+Security update:
+- The node certificate is pinned on first connection; a different certificate is refused (protects against someone impersonating your node).
+- Sending a payment, showing the seed words and deleting the wallet now require a fingerprint (PIN only if the phone has no fingerprint).
+- The wallet locks after 5 minutes of inactivity.

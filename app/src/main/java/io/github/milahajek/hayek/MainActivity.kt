@@ -58,6 +58,8 @@ import java.util.Locale
 
 private val Orange = Color(0xFFF7931A)
 
+const val IDLE_LOCK_MS = 5 * 60_000L
+
 class MainActivity : FragmentActivity() {
     private val vm: WalletViewModel by viewModels()
     private var stoppedAt = 0L
@@ -86,6 +88,32 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    // Zamčení při nečinnosti: když se 5 minut nikdo nedotkne obrazovky, peněženka se zamkne.
+    private var lastTouch = SystemClock.elapsedRealtime()
+    private val idleHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val idleCheck = object : Runnable {
+        override fun run() {
+            if (vm.isOpen && !vm.busy && SystemClock.elapsedRealtime() - lastTouch > IDLE_LOCK_MS) vm.lockApp()
+            idleHandler.postDelayed(this, 15_000)
+        }
+    }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent?): Boolean {
+        lastTouch = SystemClock.elapsedRealtime()
+        return super.dispatchTouchEvent(ev)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        lastTouch = SystemClock.elapsedRealtime()
+        idleHandler.post(idleCheck)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        idleHandler.removeCallbacks(idleCheck)
+    }
+
     override fun onStop() {
         super.onStop()
         stoppedAt = SystemClock.elapsedRealtime()
@@ -98,12 +126,12 @@ class MainActivity : FragmentActivity() {
     }
 }
 
-fun FragmentActivity.auth(vm: WalletViewModel, title: String, ok: () -> Unit) {
+fun FragmentActivity.auth(vm: WalletViewModel, title: String, strong: Boolean = false, ok: () -> Unit) {
     if (!canAuthenticate(this)) {
         vm.message = "Nejdřív si v telefonu nastavte zámek obrazovky (PIN nebo otisk prstu). Bez něj peněženka nemůže bezpečně uložit klíče."
         return
     }
-    authenticate(this, title, ok) { err -> vm.message = "Ověření se nezdařilo: $err" }
+    authenticate(this, title, strong, ok) { err -> vm.message = "Ověření se nezdařilo: $err" }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -586,7 +614,7 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
                 }
             }
             Spacer(Modifier.height(12.dp))
-            HayekButton(onClick = { act.auth(vm, "Potvrdit platbu ${formatSat(p.amountSat)}") { vm.broadcast() } },
+            HayekButton(onClick = { act.auth(vm, "Potvrdit platbu ${formatSat(p.amountSat)}", strong = true) { vm.broadcast() } },
                 enabled = !vm.busy, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                 Icon(Icons.Default.Fingerprint, null); Spacer(Modifier.width(6.dp)); Text("Podepsat a odeslat")
             }
@@ -616,6 +644,47 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
         Spacer(Modifier.height(8.dp))
         Text("Telefon musí být ve stejné síti jako uzel, nebo připojený domů přes VPN (např. WireGuard). Aplikace se nikdy nepřipojí k cizímu serveru.",
             fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        // Certifikát uzlu (připnutí)
+        @Suppress("UNUSED_VARIABLE") val pv = vm.pinVersion
+        val fp = vm.pinnedFingerprint(url)
+        var confirmForget by remember { mutableStateOf(false) }
+        Spacer(Modifier.height(10.dp))
+        when {
+            url.startsWith("tcp://") -> Text(
+                "⚠ tcp:// je nešifrované spojení – kdokoli ve stejné síti vidí, na které adresy se peněženka ptá. Doporučujeme ssl://.",
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.error
+            )
+            fp != null -> GlassCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.VerifiedUser, null, tint = Color(0xFF2E9E4F))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Certifikát uzlu je připnutý", fontWeight = FontWeight.SemiBold)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Peněženka se připojí jen k serveru s tímto certifikátem. Kdyby se někdo vydával za váš uzel, spojení odmítne.",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text("SHA-256: " + fp.chunked(24).joinToString("\n"), fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                    Spacer(Modifier.height(8.dp))
+                    GlassButton(onClick = { confirmForget = true }, Modifier.fillMaxWidth()) { Text("Zapomenout certifikát") }
+                }
+            }
+            url.startsWith("ssl://") -> Text(
+                "Certifikát uzlu se uloží (připne) při prvním spojení. Pak už peněženka jiný nepřijme.",
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (confirmForget) AlertDialog(
+            onDismissRequest = { confirmForget = false },
+            title = { Text("Zapomenout certifikát?") },
+            text = { Text("Udělejte to jen tehdy, když jste certifikát na uzlu sami změnili (reinstalace, aktualizace). Při příštím spojení se uloží nový certifikát – ať je jakýkoli.") },
+            confirmButton = { TextButton(onClick = { confirmForget = false; vm.forgetPin(url) }) { Text("Zapomenout") } },
+            dismissButton = { TextButton(onClick = { confirmForget = false }) { Text("Zrušit") } }
+        )
 
         HorizontalDivider(Modifier.padding(vertical = 20.dp))
         Text("Prohlížeč bloků (váš Mempool)", fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -661,7 +730,7 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
             onDismissRequest = { confirmDelete = false },
             title = { Text("Smazat peněženku?") },
             text = { Text("Peněženka zmizí z telefonu. Bitcoiny zůstanou na blockchainu, ale dostanete se k nim JEN pomocí zapsaných slov. Máte je opravdu zapsaná?") },
-            confirmButton = { TextButton(onClick = { confirmDelete = false; act.auth(vm, "Smazat peněženku") { vm.deleteWallet() } }) { Text("Smazat") } },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; act.auth(vm, "Smazat peněženku", strong = true) { vm.deleteWallet() } }) { Text("Smazat") } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Zrušit") } }
         )
     }
@@ -674,7 +743,7 @@ fun SeedScreen(vm: WalletViewModel, act: FragmentActivity) {
         Text("Nikomu ji neukazujte. Nikdo (ani podpora) ji po vás nikdy nepotřebuje.")
         Spacer(Modifier.height(12.dp))
         if (vm.revealSeed) SeedGrid(vm.seedWords ?: "")
-        else HayekButton(onClick = { act.auth(vm, "Zobrazit obnovovací frázi") { vm.revealSeed = true } }, Modifier.fillMaxWidth()) {
+        else HayekButton(onClick = { act.auth(vm, "Zobrazit obnovovací frázi", strong = true) { vm.revealSeed = true } }, Modifier.fillMaxWidth()) {
             Icon(Icons.Default.Fingerprint, null); Spacer(Modifier.width(6.dp)); Text("Zobrazit slova")
         }
     }

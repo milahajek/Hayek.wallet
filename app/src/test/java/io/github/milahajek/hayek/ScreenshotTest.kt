@@ -69,6 +69,12 @@ class ScreenshotTest {
         act.window.decorView.captureRoboImage("build/shots/15_ikona.png")
     }
 
+    @Test fun s16_pin() = shoot("16_certifikat") {
+        it.setThemeMode(2); it.connected = true; it.setServer("ssl://192.168.0.10:50002")
+        it.pins.set("192.168.0.10:50002", "20:52:19:23:B7:D9:4A:C6:E3:55:41:CC:7B:AB:F1:4C:4D:F3:57:95:1E:FD:F0:17:EF:A9:B5:12:BB:E9:74:F9")
+        it.screen = Screen.Settings
+    }
+
     @Test fun s1_welcome() = shoot("1_uvod") { it.setThemeMode(0) }
     @Test fun s2_dice() = shoot("2_kostky") { it.screen = Screen.Dice; it.rolls = "35216614523362154126635214513624436521164352614253366" }
     @Test fun s3_seed() = shoot("3_slova") { it.screen = Screen.ShowSeed(fakeWords) }

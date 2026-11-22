@@ -78,16 +78,32 @@ class SecureStore(context: Context) {
 fun canAuthenticate(activity: FragmentActivity): Boolean =
     BiometricManager.from(activity).canAuthenticate(AUTHENTICATORS) == BiometricManager.BIOMETRIC_SUCCESS
 
-fun authenticate(activity: FragmentActivity, title: String, onOk: () -> Unit, onFail: (String) -> Unit) {
+/** Má telefon nastavený otisk prstu (nebo jinou silnou biometrii)? */
+fun hasStrongBiometric(activity: FragmentActivity): Boolean =
+    BiometricManager.from(activity).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
+        BiometricManager.BIOMETRIC_SUCCESS
+
+/**
+ * @param strong true = jen otisk prstu (PIN nestačí). Používá se pro odeslání platby, zobrazení
+ *  slov a smazání peněženky – PIN může někdo odkoukat, otisk ne. Když telefon otisk nemá, použije se PIN.
+ */
+fun authenticate(activity: FragmentActivity, title: String, strong: Boolean, onOk: () -> Unit, onFail: (String) -> Unit) {
     val prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity),
         object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onOk()
-            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = onFail(errString.toString())
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                if (errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON && errorCode != BiometricPrompt.ERROR_USER_CANCELED)
+                    onFail(errString.toString())
+            }
         })
-    val info = BiometricPrompt.PromptInfo.Builder()
-        .setTitle(title)
-        .setSubtitle("Ověřte se otiskem prstu nebo PINem")
-        .setAllowedAuthenticators(AUTHENTICATORS)
-        .build()
-    prompt.authenticate(info)
+    val fingerprintOnly = strong && hasStrongBiometric(activity)
+    val b = BiometricPrompt.PromptInfo.Builder().setTitle(title)
+    if (fingerprintOnly) {
+        b.setSubtitle("Potvrďte otiskem prstu")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .setNegativeButtonText("Zrušit")
+    } else {
+        b.setSubtitle("Ověřte se otiskem prstu nebo PINem").setAllowedAuthenticators(AUTHENTICATORS)
+    }
+    prompt.authenticate(b.build())
 }
