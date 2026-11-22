@@ -4,44 +4,16 @@ Categories:
   - Money
 License: GPL-3.0-or-later
 AuthorName: milahajek
-SourceCode: https://github.com/milahajek/HODL-Wallet
-IssueTracker: https://github.com/milahajek/HODL-Wallet/issues
+SourceCode: https://github.com/milahajek/Hayek.wallet
+IssueTracker: https://github.com/milahajek/Hayek.wallet/issues
 
 AutoName: Hayek Wallet
 
 RepoType: git
-Repo: https://github.com/milahajek/HODL-Wallet.git
+Repo: https://github.com/milahajek/Hayek.wallet.git
 
 Builds:
-  - versionName: '1.0'
-    versionCode: 1
-    commit: v1.0
-    subdir: app
-    gradle:
-      - yes
-
-  - versionName: '1.1'
-    versionCode: 2
-    commit: v1.1
-    subdir: app
-    gradle:
-      - yes
-
-  - versionName: '1.1.4'
-    versionCode: 6
-    commit: v1.1.4
-    subdir: app
-    gradle:
-      - yes
-
-  - versionName: '1.2'
-    versionCode: 7
-    commit: v1.2
-    subdir: app
-    gradle:
-      - yes
-
-  - versionName: '1.2.1'
+  - versionName: 1.2.1
     versionCode: 8
     commit: v1.2.1
     subdir: app
@@ -50,5 +22,5 @@ Builds:
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: '1.2.1'
+CurrentVersion: 1.2.1
 CurrentVersionCode: 8
