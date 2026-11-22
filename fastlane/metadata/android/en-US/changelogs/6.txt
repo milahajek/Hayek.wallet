@@ -1,0 +1,1 @@
+Connection diagnostics in Settings → Test; hint when tcp:// is used on an encrypted port.

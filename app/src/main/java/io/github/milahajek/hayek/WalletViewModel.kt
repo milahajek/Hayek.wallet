@@ -118,7 +118,11 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         }
         val m = e.message.orEmpty()
         val cls = e::class.simpleName.orEmpty()
+        val tcpOnTls = serverUrl.trim().startsWith("tcp://") && m.contains("unexpected EOF", true)
         return when {
+            tcpOnTls -> "Spojení se hned přerušilo. Nejspíš jste zadali tcp:// na šifrovaný port.\n\n" +
+                "Na RaspiBlitzu: šifrovaně ssl://IP:50022 (Fulcrum) nebo ssl://IP:50002 (ElectRS), " +
+                "nešifrovaně tcp://IP:50021 (Fulcrum) nebo tcp://IP:50001 (ElectRS).\n\nDetail: $m"
             m == NO_SERVER -> "Peněženka ještě neví, ke kterému uzlu se připojit.\n\nV ⚙ Nastavení zadejte adresu svého Electrum serveru (Fulcrum nebo ElectRS), např. ssl://192.168.0.10:50002."
             m.contains("Insufficient funds", true) -> "Nedostatek prostředků (včetně poplatku)."
             m.contains("dust", true) -> "Částka je příliš malá (pod limitem sítě)."
@@ -284,7 +288,13 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun testServer(url: String) = run {
-        message = withContext(Dispatchers.IO) { io.github.milahajek.hayek.testServer(url.trim(), pins).also { pinVersion++ } }
+        message = withContext(Dispatchers.IO) {
+            try {
+                io.github.milahajek.hayek.testServer(url.trim(), pins).also { pinVersion++ }
+            } catch (e: Exception) {
+                friendly(e) + "\n\n— Podrobná diagnostika —\n" + diagnoseConnection(url.trim(), pins)
+            }
+        }
     }
 
     fun lockApp() {

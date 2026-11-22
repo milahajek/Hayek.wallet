@@ -84,3 +84,69 @@ data class ServerAddr(val ssl: Boolean, val host: String, val port: Int) {
         }
     }
 }
+
+/**
+ * Podrobná diagnostika spojení s uzlem – krok po kroku, každý krok samostatně.
+ * Výsledek je text pro uživatele (aby šlo přesně zjistit, kde se spojení zastaví).
+ */
+fun diagnoseConnection(url: String, pins: PinStore): String {
+    val out = StringBuilder()
+    fun step(name: String, block: () -> String) {
+        val t0 = System.currentTimeMillis()
+        try {
+            val r = block()
+            out.append("✔ $name (${System.currentTimeMillis() - t0} ms)").append(if (r.isNotEmpty()) "\n   $r" else "").append('\n')
+        } catch (e: Throwable) {
+            val root = generateSequence(e) { it.cause }.last()
+            out.append("✘ $name: ${e::class.simpleName}: ${e.message}")
+            if (root !== e) out.append(" ← ${root::class.simpleName}: ${root.message}")
+            out.append('\n')
+        }
+    }
+    val addr = try { ServerAddr.parse(url) } catch (e: Exception) { return "✘ Adresa: ${e.message}" }
+    out.append("Diagnostika ${addr.hostPort} (${if (addr.ssl) "ssl" else "tcp"})\n")
+    step("1 TCP spojení") {
+        Socket().use { it.connect(InetSocketAddress(addr.host, addr.port), 8000) }; ""
+    }
+    if (addr.ssl) {
+        step("2 TLS (Java)") {
+            val trustAll = object : X509TrustManager {
+                override fun checkClientTrusted(c: Array<out X509Certificate>?, a: String?) {}
+                override fun checkServerTrusted(c: Array<out X509Certificate>?, a: String?) {}
+                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+            }
+            val ctx = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trustAll), null) }
+            Socket().use { raw ->
+                raw.connect(InetSocketAddress(addr.host, addr.port), 8000); raw.soTimeout = 8000
+                (ctx.socketFactory.createSocket(raw, addr.host, addr.port, false) as SSLSocket).use { s ->
+                    s.startHandshake()
+                    val sess = s.session
+                    s.outputStream.write("{\"id\":1,\"method\":\"server.version\",\"params\":[\"diag\",\"1.4\"]}\n".toByteArray())
+                    s.outputStream.flush()
+                    val line = s.inputStream.bufferedReader().readLine() ?: "(žádná odpověď)"
+                    "${sess.protocol} ${sess.cipherSuite}\n   odpověď: ${line.take(80)}"
+                }
+            }
+        }
+        step("3 Otisk certifikátu") {
+            val fp = verifyServerCert(addr.host, addr.port, object : PinStore {
+                override fun get(hostPort: String) = pins.get(hostPort)
+                override fun set(hostPort: String, fingerprint: String) {}
+            })
+            val p = pins.get(addr.hostPort)
+            "${fp.take(23)}… " + when (p) { null -> "(zatím neuložen)"; fp -> "(sedí s uloženým)"; else -> "(NESEDÍ s uloženým ${p.take(11)}…)" }
+        }
+    }
+    step("4 BDK přímo") {
+        val c = org.bitcoindevkit.ElectrumClient(url.trim(), null, 15.toUByte(), 0.toUByte(), false)
+        val f = c.serverFeatures()
+        "${f.serverVersion}, blok ${c.blockHeadersSubscribe().height}"
+    }
+    step("5 BDK podruhé") {
+        val c = org.bitcoindevkit.ElectrumClient(url.trim(), null, 15.toUByte(), 0.toUByte(), false)
+        c.serverFeatures().serverVersion
+    }
+    if (!addr.ssl && out.contains("✘ 4") && out.contains("unexpected EOF"))
+        out.append("\n→ Port nejspíš čeká šifrované spojení. Zkuste ssl://${addr.hostPort}")
+    return out.toString().trimEnd()
+}

@@ -217,10 +217,18 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
         AlertDialog(
             onDismissRequest = { vm.message = null },
             confirmButton = { TextButton(onClick = { vm.message = null }) { Text("OK") } },
-            dismissButton = if (txid.isNotEmpty()) {
-                { TextButton(onClick = { openTx(ctx, vm, vm.txLink(txid)) }) { Text("Zobrazit v Mempoolu") } }
-            } else null,
-            text = { Text(msg) }
+            dismissButton = when {
+                txid.isNotEmpty() -> { { TextButton(onClick = { openTx(ctx, vm, vm.txLink(txid)) }) { Text("Zobrazit v Mempoolu") } } }
+                msg.contains("Diagnostika") -> { { TextButton(onClick = { copy(ctx, msg) }) { Text("Kopírovat") } } }
+                else -> null
+            },
+            text = {
+                androidx.compose.foundation.text.selection.SelectionContainer {
+                    Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
+                        Text(msg, fontSize = if (msg.contains("Diagnostika")) 13.sp else 14.sp)
+                    }
+                }
+            }
         )
     }
 }

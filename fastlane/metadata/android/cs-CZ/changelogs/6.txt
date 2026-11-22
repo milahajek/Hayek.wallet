@@ -1,0 +1,1 @@
+Podrobná diagnostika spojení (Nastavení → Vyzkoušet); upozornění při záměně tcp:// a šifrovaného portu.
