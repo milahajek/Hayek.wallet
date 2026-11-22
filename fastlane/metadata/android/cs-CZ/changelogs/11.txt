@@ -1,0 +1,2 @@
+⚡ Lightning přes váš vlastní LND uzel (RaspiBlitz): placení faktur, přijímání s QR kódem, historie. Telefon dostane jen omezený klíč – nemůže vybrat bitcoiny z uzlu ani zavírat kanály. Certifikát uzlu se připne, limit na jednu platbu, potvrzení otiskem.
+Skenování QR kódů fotoaparátem.

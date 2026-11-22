@@ -8,6 +8,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -29,7 +31,15 @@ sealed interface Screen {
     data object Send : Screen
     data object Settings : Screen
     data object Seed : Screen
+    data object Lightning : Screen
+    data object LnPay : Screen
+    data object LnReceive : Screen
+    data object LnSetup : Screen
 }
+
+const val LND_KEY = "lnd"
+fun encodeLndSecret(c: LndConfig) = c.hostPort + "|" + c.macaroonHex
+fun decodeLndSecret(s: String) = LndConfig(s.substringBefore("|"), s.substringAfter("|"))
 
 class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -144,7 +154,9 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     /** Volat až po úspěšném ověření otiskem/PINem. */
     fun unlocked() = run {
         val secret = withContext(Dispatchers.IO) { store.loadSeed() }
+        lnConfig = withContext(Dispatchers.IO) { runCatching { store.loadExtra(LND_KEY)?.let(::decodeLndSecret) }.getOrNull() }
         open(secret)
+        if (lnConfig != null) viewModelScope.launch { lnRefreshQuiet() }
     }
 
     private suspend fun open(words: String) {
@@ -301,6 +313,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun lockApp() {
+        lnClear()
         core = null
         coins = emptyList(); selected = emptySet()
         state = null
@@ -310,6 +323,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun deleteWallet() {
+        lnClear()
         store.wipe()
         dbFile.delete()
         File(dbFile.path + "-wal").delete(); File(dbFile.path + "-shm").delete()
@@ -317,5 +331,133 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         state = null
         coins = emptyList(); selected = emptySet()
         screen = Screen.Welcome
+    }
+
+    // ---------- Lightning (vlastní LND uzel) ----------
+
+    /** Připojení k LND – jen v paměti, dokud je peněženka odemčená. */
+    var lnConfig by mutableStateOf<LndConfig?>(null)
+        internal set
+    val lnConfigured get() = store.hasExtra(LND_KEY)
+    var lnInfo by mutableStateOf<LnInfo?>(null)
+    var lnBalance by mutableStateOf<LnBalance?>(null)
+    var lnHistory by mutableStateOf<List<LnHistoryItem>>(emptyList())
+    var lnError by mutableStateOf<String?>(null)
+    var lnDecoded by mutableStateOf<LnDecoded?>(null)
+    var lnInvoice by mutableStateOf<LnInvoice?>(null)
+    var lnInvoicePaid by mutableStateOf(false)
+    var lnPrefill: String = ""
+    var lnLimit by mutableStateOf(prefs.getLong("ln_limit", 100_000L))
+        private set
+    private var pollJob: Job? = null
+
+    fun saveLnLimit(sat: Long) { lnLimit = sat; prefs.edit().putLong("ln_limit", sat).apply() }
+
+    private fun lnClient(cfg: LndConfig? = lnConfig) =
+        LndClient(cfg ?: throw IllegalStateException("Lightning není připojený. Nastavte ho v ⚙ Nastavení."), pins)
+
+    fun lnPinned(): String? = lnConfig?.let { pins.get("ln:${it.hostPort}") }
+
+    private fun lnFriendly(e: Exception): String {
+        if (e is CertMismatchException) return "⚠ CERTIFIKÁT LIGHTNING UZLU SE ZMĚNIL – spojení odmítnuto.\n\n" +
+            "Uzel ${e.hostPort} se prokázal jiným certifikátem než minule. Může to znamenat, že se někdo v síti vydává za váš uzel.\n\n" +
+            "Pokud se certifikát LND na RaspiBlitzu změnil (reset LND, aktualizace), v ⚙ Nastavení → Lightning zvolte „Odpojit“ a připojte se znovu.\n\n" +
+            "Uložený: ${e.expected.take(23)}…\nNový:      ${e.actual.take(23)}…"
+        if (e is LndException) return e.message.orEmpty()
+        val m = e.message.orEmpty()
+        return if (e is java.io.IOException || m.contains("timed out", true) || m.contains("refused", true) || m.contains("unreachable", true))
+            "Nepodařilo se spojit s Lightning uzlem (${lnConfig?.hostPort ?: ""}).\n\n• Je telefon ve stejné Wi-Fi jako uzel?\n• Běží na RaspiBlitzu LND (a je odemčené)?\n\nDetail: ${m.ifBlank { e::class.simpleName }}"
+        else m.ifBlank { e::class.simpleName.orEmpty() }
+    }
+
+    private fun lnRun(block: suspend () -> Unit) {
+        viewModelScope.launch {
+            busy = true
+            try { block() } catch (e: Exception) { message = lnFriendly(e) } finally { busy = false }
+        }
+    }
+
+    private suspend fun lnRefreshQuiet() {
+        val cfg = lnConfig ?: return
+        try {
+            val c = lnClient(cfg)
+            val (i, b, h) = withContext(Dispatchers.IO) { Triple(c.info(), c.balance(), runCatching { c.history() }.getOrDefault(emptyList())) }
+            lnInfo = i; lnBalance = b; lnHistory = h; lnError = null
+        } catch (e: Exception) {
+            lnError = lnFriendly(e)
+        }
+    }
+
+    fun lnRefresh() = lnRun { lnRefreshQuiet(); lnError?.let { message = it } }
+
+    fun openLightning() { screen = Screen.Lightning; viewModelScope.launch { lnRefreshQuiet() } }
+
+    /** Otestuje připojení a vrátí popis uzlu (nic neukládá kromě otisku certifikátu). */
+    fun lnTest(cfg: LndConfig, onOk: (LnInfo) -> Unit) = lnRun {
+        val info = withContext(Dispatchers.IO) { lnClient(cfg).info() }
+        onOk(info)
+    }
+
+    /** Volat až po ověření (otisk) – uloží šifrovaně přístupový klíč. */
+    fun lnSave(cfg: LndConfig) = lnRun {
+        withContext(Dispatchers.IO) { store.saveExtra(LND_KEY, encodeLndSecret(cfg)) }
+        lnConfig = cfg
+        lnRefreshQuiet()
+        screen = Screen.Lightning
+        message = "Lightning připojen ✔" + (lnInfo?.let { "\nUzel: ${it.alias}, aktivní kanály: ${it.activeChannels}" } ?: "")
+    }
+
+    fun lnRemove() {
+        lnConfig?.let { prefs.edit().remove("pin:ln:${it.hostPort}").apply() }
+        store.removeExtra(LND_KEY)
+        lnClear()
+        pinVersion++
+    }
+
+    private fun lnClear() {
+        pollJob?.cancel(); pollJob = null
+        lnConfig = null; lnInfo = null; lnBalance = null; lnHistory = emptyList()
+        lnDecoded = null; lnInvoice = null; lnInvoicePaid = false; lnError = null
+    }
+
+    fun openLnPay(prefill: String = "") { lnPrefill = prefill; lnDecoded = null; screen = Screen.LnPay }
+
+    fun lnDecode(raw: String) = lnRun {
+        lnDecoded = null
+        val d = withContext(Dispatchers.IO) { lnClient().decode(raw) }
+        if (d.expired()) throw IllegalArgumentException("Faktura vypršela. Požádejte příjemce o novou.")
+        lnDecoded = d
+    }
+
+    fun lnFeeLimit(amountSat: Long) = maxOf(10L, amountSat / 100)  // max 1 % (min. 10 sat)
+
+    /** Volat až po ověření otiskem. */
+    fun lnPay(amountOverride: Long?) = lnRun {
+        val d = lnDecoded ?: return@lnRun
+        val amount = if (d.amountSat > 0) d.amountSat else amountOverride ?: throw IllegalArgumentException("Zadejte částku.")
+        if (amount > lnLimit) throw IllegalArgumentException("Částka ${amount} sat je nad vaším limitem ${lnLimit} sat na jednu platbu (⚙ Nastavení → Lightning).")
+        val r = withContext(Dispatchers.IO) { lnClient().pay(d.paymentRequest, lnFeeLimit(amount), amountOverride.takeIf { d.amountSat == 0L }) }
+        if (r.ok) {
+            lnDecoded = null
+            screen = Screen.Lightning
+            message = "Zaplaceno ⚡ ✔\n${amount} sat, poplatek ${r.feeSat} sat"
+        } else message = r.failure
+        lnRefreshQuiet()
+    }
+
+    fun openLnReceive() { pollJob?.cancel(); lnInvoice = null; lnInvoicePaid = false; screen = Screen.LnReceive }
+
+    fun lnCreateInvoice(amountSat: Long, memo: String) = lnRun {
+        val inv = withContext(Dispatchers.IO) { lnClient().addInvoice(amountSat, memo) }
+        lnInvoice = inv; lnInvoicePaid = false
+        pollJob?.cancel()
+        pollJob = viewModelScope.launch {
+            val until = System.currentTimeMillis() + 3_600_000
+            while (System.currentTimeMillis() < until && lnInvoice == inv && screen == Screen.LnReceive) {
+                delay(2_500)
+                val paid = try { withContext(Dispatchers.IO) { lnClient().isSettled(inv.rHashHex) } } catch (_: Exception) { false }
+                if (paid && lnInvoice == inv) { lnInvoicePaid = true; lnRefreshQuiet(); break }
+            }
+        }
     }
 }

@@ -1,0 +1,2 @@
+⚡ Lightning via your own LND node (RaspiBlitz): pay invoices, receive with QR codes, history. The phone only gets a restricted macaroon – it cannot withdraw on-chain funds or close channels. Node certificate pinning, per-payment limit, fingerprint confirmation.
+QR code scanning with the camera.

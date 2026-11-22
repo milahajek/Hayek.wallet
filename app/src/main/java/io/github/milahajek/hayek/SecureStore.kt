@@ -66,6 +66,32 @@ class SecureStore(context: Context) {
         return String(c.doFinal(ct))
     }
 
+    /** Další tajný údaj (např. přístupový klíč k Lightning uzlu), šifrovaný stejným klíčem. Do 60 s po ověření. */
+    fun saveExtra(name: String, value: String) {
+        val c = Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(Cipher.ENCRYPT_MODE, key())
+        val ct = c.doFinal(value.toByteArray())
+        prefs.edit()
+            .putString("x_$name", Base64.encodeToString(ct, Base64.NO_WRAP))
+            .putString("x_${name}_iv", Base64.encodeToString(c.iv, Base64.NO_WRAP))
+            .commit()
+    }
+
+    fun hasExtra(name: String) = prefs.contains("x_$name")
+
+    /** Do 60 s po ověření. */
+    fun loadExtra(name: String): String? {
+        val ct = prefs.getString("x_$name", null) ?: return null
+        val iv = prefs.getString("x_${name}_iv", null) ?: return null
+        val c = Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, Base64.decode(iv, Base64.NO_WRAP)))
+        return String(c.doFinal(Base64.decode(ct, Base64.NO_WRAP)))
+    }
+
+    fun removeExtra(name: String) {
+        prefs.edit().remove("x_$name").remove("x_${name}_iv").commit()
+    }
+
     fun wipe() {
         prefs.edit().clear().commit()
         try {

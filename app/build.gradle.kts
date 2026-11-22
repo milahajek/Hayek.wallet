@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.milahajek.hayek"
         minSdk = 30
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.3.0"
+        versionCode = 11
+        versionName = "1.4.0"
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 
@@ -52,6 +52,7 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.18.1")
     testImplementation("io.github.takahirom.roborazzi:roborazzi:1.79.0")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20260814")
     testImplementation(platform("androidx.compose:compose-bom:2025.10.01"))
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("androidx.test.ext:junit:1.2.1")

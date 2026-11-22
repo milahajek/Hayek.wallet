@@ -89,4 +89,30 @@ class ScreenshotTest {
     @Test fun s5_receive() = shoot("5_prijmout") { it.state = state; it.connected = true; it.screen = Screen.Receive }
     @Test fun s6_send() = shoot("6_odeslat") { it.state = state; it.connected = true; it.feeRate = "4"; it.screen = Screen.Send }
     @Test fun s7_settings() = shoot("7_nastaveni") { it.connected = true; it.setServer("ssl://192.168.0.10:50002"); it.screen = Screen.Settings }
+
+    private val lnCfg = LndConfig("192.168.0.10:8080", "02".repeat(80))
+    private fun lnState(vm: WalletViewModel) {
+        vm.lnConfig = lnCfg; vm.connected = true
+        vm.lnInfo = LnInfo("Můj uzel", "03e4ba21", 1, true, "0.19.3-beta")
+        vm.lnBalance = LnBalance(318_420, 176_300, 0)
+        vm.lnHistory = listOf(
+            LnHistoryItem(true, 21_000, 0, 1795710000, "Oběd", "i:3"),
+            LnHistoryItem(false, 4_200, 1, 1795700000, "", "p:a"),
+            LnHistoryItem(false, 2_100, 0, 1795600000, "", "p:b"),
+        )
+    }
+    @Test fun s19_lightning() = shoot("19_lightning") { it.setThemeMode(0); lnState(it); it.screen = Screen.Lightning }
+    @Test fun s20_ln_pay() = shoot("20_ln_zaplatit") {
+        it.setThemeMode(0); lnState(it)
+        it.lnDecoded = LnDecoded("lnbcrt15u1p4sxfugpp5tw9k9s4ed0zhen3njkse77d8lc0zmj4k2rqkla8unfzfrf0zg00qdqsw3jhxapqd0p6zanpcqzzsxqrrsssp5hn3lruytv9eesuawuwgpfz09wvnndpl2zumzkjn8mzcnpc4smqtq9qxpqysgq7de3qwfpnvjgyyv4v6kge6jcx4ef92j02lgwg8gml2yg80wngl6sdftq328uu0nhm8t96qk5vd37s06lr5w6xxsn374fwufuuuw6zrcpmyr9r0", 4_200, "Káva u Hayeka", "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f", "ab", System.currentTimeMillis() / 1000, 3600)
+        it.screen = Screen.LnPay
+    }
+    @Test fun s21_ln_receive() = shoot("21_ln_prijmout") {
+        it.setThemeMode(2); lnState(it)
+        it.lnInvoice = LnInvoice("lnbcrt15u1p4sxfugpp5tw9k9s4ed0zhen3njkse77d8lc0zmj4k2rqkla8unfzfrf0zg00qdqsw3jhxapqd0p6zanpcqzzsxqrrsssp5hn3lruytv9eesuawuwgpfz09wvnndpl2zumzkjn8mzcnpc4smqtq9qxpqysgq7de3qwfpnvjgyyv4v6kge6jcx4ef92j02lgwg8gml2yg80wngl6sdftq328uu0nhm8t96qk5vd37s06lr5w6xxsn374fwufuuuw6zrcpmyr9r0", "5b8b", 21_000, "Oběd")
+        it.screen = Screen.LnReceive
+    }
+    @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
+    @Test fun s22_ln_setup() = shoot("22_ln_pripojit") { it.setThemeMode(0); it.connected = true; it.setServer("ssl://192.168.0.10:50022"); it.screen = Screen.LnSetup }
+    @Test fun s23_home_ln() = shoot("23_penezenka_lightning") { it.setThemeMode(0); it.state = state; it.coins = coins; lnState(it); it.screen = Screen.Home }
 }

@@ -139,13 +139,15 @@ fun FragmentActivity.auth(vm: WalletViewModel, title: String, strong: Boolean = 
 fun App(vm: WalletViewModel, act: FragmentActivity) {
     val ctx = LocalContext.current
     val screen = vm.screen
-    val inWallet = listOf(Screen.Receive, Screen.Send, Screen.Seed, Screen.Settings, Screen.Coins, Screen.Export)
+    val inWallet = listOf(Screen.Receive, Screen.Send, Screen.Seed, Screen.Settings, Screen.Coins, Screen.Export,
+        Screen.Lightning, Screen.LnPay, Screen.LnReceive, Screen.LnSetup)
     val setup = screen == Screen.Dice || screen == Screen.Restore || screen == Screen.WatchImport || screen is Screen.ShowSeed || screen is Screen.Verify
 
     fun back() {
         when {
             screen == Screen.Coins -> vm.screen = vm.coinsReturn
-            screen == Screen.Export || screen == Screen.Seed -> { vm.revealSeed = false; vm.screen = Screen.Settings }
+            screen == Screen.Export || screen == Screen.Seed || screen == Screen.LnSetup -> { vm.revealSeed = false; vm.screen = Screen.Settings }
+            screen == Screen.LnPay || screen == Screen.LnReceive -> vm.openLightning()
             screen in inWallet -> { vm.revealSeed = false; vm.screen = if (vm.isOpen) Screen.Home else if (vm.store.hasSeed()) Screen.Locked else Screen.Welcome }
             screen is Screen.Verify -> vm.screen = Screen.ShowSeed(screen.words)
             setup -> vm.screen = Screen.Welcome
@@ -206,6 +208,10 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                 Screen.Receive -> ReceiveScreen(vm)
                 Screen.Send -> SendScreen(vm, act)
                 Screen.Settings -> SettingsScreen(vm, act)
+                Screen.Lightning -> LightningScreen(vm)
+                Screen.LnPay -> LnPayScreen(vm, act)
+                Screen.LnReceive -> LnReceiveScreen(vm)
+                Screen.LnSetup -> LnSetupScreen(vm, act)
                 Screen.Seed -> SeedScreen(vm, act)
             }
             if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
@@ -488,6 +494,7 @@ fun HomeScreen(vm: WalletViewModel) {
             Icon(Icons.Default.Toll, null); Spacer(Modifier.width(6.dp))
             Text("Mince (UTXO): ${vm.coins.size}" + if (vm.coins.any { it.frozen }) " · zmrazené: ${vm.coins.count { it.frozen }}" else "")
         }
+        if (vm.lnConfig != null) { Spacer(Modifier.height(8.dp)); LightningHomeCard(vm) }
         Text("Transakce", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
         val txs = st?.txs.orEmpty()
         if (txs.isEmpty()) Text(if (vm.busy) "Načítám z vašeho uzlu…" else "Zatím žádné transakce.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -561,8 +568,9 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
         scanning = false
         val req = parsePaymentQr(raw)
         if (req == null) {
-            vm.message = if (raw.trim().lowercase().let { it.startsWith("lightning:") || it.startsWith("lnbc") || it.startsWith("lnurl") })
-                "Tohle je Lightning platba. Hayek Wallet umí jen běžné (on-chain) bitcoinové adresy."
+            if (LndClient.looksLikeInvoice(raw) && vm.lnConfig != null) vm.openLnPay(raw)
+            else vm.message = if (raw.trim().lowercase().let { it.startsWith("lightning:") || it.startsWith("lnbc") || it.startsWith("lnurl") })
+                "Tohle je Lightning platba. Připojte v ⚙ Nastavení svůj Lightning uzel (LND) a pak ji zaplatíte přes ⚡ Lightning."
             else "QR kód neobsahuje bitcoinovou adresu:\n\n${raw.take(200)}"
         } else {
             to = req.address
@@ -782,6 +790,11 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
             confirmButton = { TextButton(onClick = { confirmForget = false; vm.forgetPin(url) }) { Text("Zapomenout") } },
             dismissButton = { TextButton(onClick = { confirmForget = false }) { Text("Zrušit") } }
         )
+
+        if (vm.isOpen) {
+            HorizontalDivider(Modifier.padding(vertical = 20.dp))
+            LnSettingsSection(vm)
+        }
 
         HorizontalDivider(Modifier.padding(vertical = 20.dp))
         Text("Prohlížeč bloků (váš Mempool)", fontSize = 20.sp, fontWeight = FontWeight.Bold)
