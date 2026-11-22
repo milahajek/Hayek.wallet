@@ -62,7 +62,6 @@ const val IDLE_LOCK_MS = 5 * 60_000L
 
 class MainActivity : FragmentActivity() {
     private val vm: WalletViewModel by viewModels()
-    private var stoppedAt = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -116,19 +115,27 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
-        stoppedAt = SystemClock.elapsedRealtime()
+        // Čas uložený ve ViewModelu přežije i otočení telefonu / změnu tmavého režimu (nové Activity).
+        if (!isChangingConfigurations) vm.backgroundSince = SystemClock.elapsedRealtime()
     }
 
     override fun onStart() {
         super.onStart()
         // Po 2 minutách na pozadí se peněženka zamkne.
-        if (stoppedAt != 0L && SystemClock.elapsedRealtime() - stoppedAt > 120_000 && vm.isOpen) vm.lockApp()
+        val since = vm.backgroundSince
+        if (since != 0L && SystemClock.elapsedRealtime() - since > 120_000 && vm.isOpen) vm.lockApp()
+        vm.backgroundSince = 0L
     }
 }
 
 fun FragmentActivity.auth(vm: WalletViewModel, title: String, strong: Boolean = false, ok: () -> Unit) {
     if (!canAuthenticate(this)) {
         vm.message = "Nejdřív si v telefonu nastavte zámek obrazovky (PIN nebo otisk prstu). Bez něj peněženka nemůže bezpečně uložit klíče."
+        return
+    }
+    if (strong && hasStrongBiometric(this) && vm.store.fingerprintsChanged()) {
+        // Někdo mohl přidat vlastní otisk (stačí k tomu znát PIN). Než otisku znovu uvěříme, ověříme slova.
+        vm.fingerprintCheck = { authenticate(this, title, strong, ok) { err -> vm.message = "Ověření se nezdařilo: $err" } }
         return
     }
     authenticate(this, title, strong, ok) { err -> vm.message = "Ověření se nezdařilo: $err" }
@@ -213,12 +220,14 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                 Screen.Lightning -> LightningScreen(vm)
                 Screen.LnPay -> LnPayScreen(vm, act)
                 Screen.LnReceive -> LnReceiveScreen(vm)
-                Screen.LnSetup -> LnSetupScreen(vm, act)
+                Screen.LnSetup -> IncognitoKeyboard { LnSetupScreen(vm, act) }
                 Screen.Seed -> SeedScreen(vm, act)
             }
             if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
         }
     }
+
+    vm.fingerprintCheck?.let { FingerprintCheckDialog(vm, act) }
 
     vm.message?.let { msg ->
         val txid = msg.substringAfter("TXID: ", "").trim()
@@ -702,7 +711,7 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             GlassButton(onClick = { vm.testServer(url) }, enabled = !vm.busy, modifier = Modifier.weight(1f)) { Text("Vyzkoušet") }
-            HayekButton(onClick = { vm.setServer(url); vm.message = "Uloženo." }, modifier = Modifier.weight(1f)) { Text("Uložit") }
+            HayekButton(onClick = { val save = { vm.setServer(url); vm.message = "Uloženo." }; if (vm.isOpen) act.auth(vm, "Změnit server") { save() } else save() }, modifier = Modifier.weight(1f)) { Text("Uložit") }
         }
         Spacer(Modifier.height(8.dp))
         if (!isPublicServer(url)) Text("Telefon musí být ve stejné síti jako uzel, nebo připojený domů přes VPN (např. WireGuard). Aplikace se sama od sebe nikdy nepřipojí k cizímu serveru.",
@@ -790,7 +799,7 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
                                     }
                                     TextButton(onClick = { pickPublic = false; vm.testServer(u) }) { Text("Vyzkoušet") }
                                     TextButton(onClick = {
-                                        url = u; vm.setServer(u); pickPublic = false
+                                        url = u; pickPublic = false; if (vm.isOpen) act.auth(vm, "Změnit server") { vm.setServer(u) } else vm.setServer(u)
                                         vm.message = "Peněženka teď používá veřejný server $name.\nNa svůj uzel se vrátíte zadáním jeho adresy a Uložit."
                                     }) { Text("Použít") }
                                 }
@@ -805,13 +814,13 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
             onDismissRequest = { confirmForget = false },
             title = { Text("Zapomenout certifikát?") },
             text = { Text("Udělejte to jen tehdy, když jste certifikát na uzlu sami změnili (reinstalace, aktualizace). Při příštím spojení se uloží nový certifikát – ať je jakýkoli.") },
-            confirmButton = { TextButton(onClick = { confirmForget = false; vm.forgetPin(url) }) { Text("Zapomenout") } },
+            confirmButton = { TextButton(onClick = { confirmForget = false; if (vm.isOpen) act.auth(vm, "Zapomenout certifikát") { vm.forgetPin(url) } else vm.forgetPin(url) }) { Text("Zapomenout") } },
             dismissButton = { TextButton(onClick = { confirmForget = false }) { Text("Zrušit") } }
         )
 
         if (vm.isOpen) {
             HorizontalDivider(Modifier.padding(vertical = 20.dp))
-            LnSettingsSection(vm)
+            LnSettingsSection(vm, act)
         }
 
         HorizontalDivider(Modifier.padding(vertical = 20.dp))
@@ -917,8 +926,17 @@ fun openUrl(ctx: Context, url: String) {
     try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } catch (_: Exception) {}
 }
 
-fun copy(ctx: Context, text: String) {
-    (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("adresa", text))
+/**
+ * @param sensitive true = schránka obsah neukáže v náhledu klávesnice/systému a po 60 s ho smaže.
+ */
+fun copy(ctx: Context, text: String, sensitive: Boolean = false) {
+    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val clip = ClipData.newPlainText("Hayek Wallet", text)
+    if (sensitive) clip.description.extras = android.os.PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
+    cm.setPrimaryClip(clip)
+    if (sensitive) android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+        runCatching { if (cm.primaryClip?.getItemAt(0)?.text?.toString() == text) cm.clearPrimaryClip() }
+    }, 60_000)
 }
 
 fun paste(ctx: Context): String? {
@@ -1053,7 +1071,7 @@ fun ExportScreen(vm: WalletViewModel) {
             Text(desc, fontFamily = FontFamily.Monospace, fontSize = 12.sp, textAlign = TextAlign.Center)
         }
         Spacer(Modifier.height(12.dp))
-        HayekButton(onClick = { copy(ctx, desc); vm.message = "Deskriptor zkopírován." }, Modifier.fillMaxWidth().height(52.dp)) {
+        HayekButton(onClick = { copy(ctx, desc, sensitive = true); vm.message = "Deskriptor zkopírován (ze schránky se za minutu smaže)." }, Modifier.fillMaxWidth().height(52.dp)) {
             Icon(Icons.Default.ContentCopy, null); Spacer(Modifier.width(6.dp)); Text("Kopírovat")
         }
     }

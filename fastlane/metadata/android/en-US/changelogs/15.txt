@@ -1,0 +1,7 @@
+Security update after an independent review:
+• Your node certificate is verified on every connection (including reconnects).
+• Background lock can no longer be bypassed by rotating the phone.
+• A newly added fingerprint requires confirmation with backup words.
+• Lightning: node certificate verified before the macaroon is sent (fingerprint in the node QR), node address validation, raising the limit requires fingerprint.
+• Safer broadcasting on connection loss (no double payment).
+• Backup and device transfer disabled, sensitive clipboard entries cleared, server change requires authentication.

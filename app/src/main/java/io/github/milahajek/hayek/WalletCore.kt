@@ -150,6 +150,17 @@ object WatchOnly {
         return b58encode(xpubVersion + d.copyOfRange(4, 78))
     }
 
+    /** Deskriptor nesmí obsahovat žádný soukromý klíč (ani WIF uvnitř multisigu). */
+    fun requirePublic(d: Descriptor) {
+        require(d.toStringWithSecret() == d.toString()) { "Deskriptor obsahuje SOUKROMÝ klíč. Pro sledování použijte jen veřejné klíče." }
+    }
+
+    /** Ověří vstup ještě před uložením (aby se soukromý klíč nikdy neuložil). */
+    fun validate(input: String) {
+        val (e, i) = descriptors(input)
+        requirePublic(Descriptor(e, NetworkKind.MAIN)); requirePublic(Descriptor(i, NetworkKind.MAIN))
+    }
+
     fun descriptors(input: String): Pair<String, String> {
         val t = input.trim().replace(Regex("\\s+"), "")
         require(!t.contains("prv")) { "Toto je SOUKROMÝ klíč. Pro sledování použijte veřejný klíč (zpub/xpub)." }
@@ -204,8 +215,20 @@ fun connect(url: String, pins: PinStore): ElectrumClient {
     val public = isPublicServer(url)
     // Vlastní uzel (certifikát podepsaný sám sebou): ověříme ho proti uloženému otisku.
     // Veřejný server: certifikát ověří certifikační autorita (připínání by se rozbíjelo při každé obnově).
-    if (addr.ssl && !public) verifyServerCert(addr.host, addr.port, pins)
-    val client = ElectrumClient(normalizeServerUrl(url), null, 20.toUByte(), 2.toUByte(), public)
+    val client = if (addr.ssl && !public) {
+        // 1) ověř / připni certifikát (při neshodě srozumitelná výjimka pro uživatele),
+        // 2) BDK pusť jen přes relay, který certifikát kontroluje u KAŽDÉHO spojení.
+        verifyServerCert(addr.host, addr.port, pins)
+        val relay = PinnedRelay.forServer(addr.host, addr.port, pins)
+        try {
+            ElectrumClient("tcp://127.0.0.1:${relay.localPort}", null, 20.toUByte(), 2.toUByte(), false)
+        } catch (e: Exception) {
+            relay.lastMismatch?.let { throw it }
+            throw e
+        }
+    } else {
+        ElectrumClient(normalizeServerUrl(url), null, 20.toUByte(), 2.toUByte(), public)
+    }
     val genesis = client.serverFeatures().genesisHash.toString()
     check(genesis == MAINNET_GENESIS) { "Server není Bitcoin mainnet – odmítám se připojit." }
     return client
@@ -246,7 +269,7 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
             val (e, i) = WatchOnly.descriptors(secret.removePrefix(WATCH_PREFIX))
             external = Descriptor(e, NetworkKind.MAIN)
             internal = Descriptor(i, NetworkKind.MAIN)
-            check(!external.toStringWithSecret().contains("prv")) { "Deskriptor obsahuje soukromý klíč" }
+            WatchOnly.requirePublic(external); WatchOnly.requirePublic(internal)
         } else {
             val secretKey = DescriptorSecretKey(NetworkKind.MAIN, Mnemonic.fromString(secret), null)
             external = Descriptor.newBip84(secretKey, KeychainKind.EXTERNAL, NetworkKind.MAIN)
@@ -388,8 +411,34 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
         check(!watchOnly) { "Sledovací peněženka nemůže podepisovat." }
         check(wallet.sign(p.psbt)) { "Transakci se nepodařilo podepsat" }
         val tx = p.psbt.extractTx()
-        return withClient { it.transactionBroadcast(tx) }.toString()
+        return broadcastAndApply(tx)
     }
+
+    /**
+     * Odešle transakci a hned ji zapíše do peněženky jako nepotvrzenou (použité mince se už nenabídnou znovu).
+     * Pokud uzel odpoví „už ji znám“ (první pokus prošel, jen se ztratila odpověď), bere se to jako úspěch.
+     */
+    private fun broadcastAndApply(tx: org.bitcoindevkit.Transaction): String {
+        val txid = tx.computeTxid().toString()
+        try {
+            withClient { it.transactionBroadcast(tx) }
+        } catch (e: Exception) {
+            // Odpověď se mohla jen ztratit (nebo „už ji znám“): zeptáme se uzlu, jestli transakci má.
+            if (!isOwnTxKnown(txid)) {
+                throw IllegalStateException(
+                    "Transakci se nepodařilo odeslat, nebo to nejde ověřit. Nic znovu neposílejte, dokud se peněženka nenačte z uzlu.\n" +
+                        "Zkontrolujte ji v Mempoolu.\nTXID: $txid\n\nDetail: ${e.message}"
+                )
+            }
+        }
+        wallet.applyUnconfirmedTxs(listOf(UnconfirmedTx(tx, (System.currentTimeMillis() / 1000).toULong())))
+        wallet.persist(persister)
+        return txid
+    }
+
+    private fun isOwnTxKnown(txid: String): Boolean = try {
+        withClient { it.transactionGetRaw(Txid.fromString(txid)) }; true
+    } catch (_: Exception) { false }
 
     /**
      * Urychlení nepotvrzené odeslané transakce (Replace-By-Fee): stejná platba, vyšší poplatek.
@@ -423,12 +472,8 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
     fun signAndBroadcastBump(b: PreparedBump): String {
         check(!watchOnly) { "Sledovací peněženka nemůže podepisovat." }
         check(wallet.sign(b.psbt)) { "Transakci se nepodařilo podepsat" }
-        val tx = b.psbt.extractTx()
-        val newId = withClient { it.transactionBroadcast(tx) }.toString()
         // Peněženka hned uvidí náhradu (původní transakce zmizí, nečeká se na další synchronizaci).
-        wallet.applyUnconfirmedTxs(listOf(UnconfirmedTx(tx, (System.currentTimeMillis() / 1000).toULong())))
-        wallet.persist(persister)
-        return newId
+        return broadcastAndApply(b.psbt.extractTx())
     }
 
     /**

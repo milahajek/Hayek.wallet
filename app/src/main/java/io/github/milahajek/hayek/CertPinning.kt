@@ -1,7 +1,12 @@
 package io.github.milahajek.hayek
 
+import java.io.InputStream
+import java.io.OutputStream
+import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.ConcurrentHashMap
 import java.security.MessageDigest
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
@@ -171,4 +176,96 @@ fun diagnoseConnection(url: String, pins: PinStore): String {
     if (!addr.ssl && out.contains("✘ 4") && out.contains("unexpected EOF"))
         out.append("\n→ Port nejspíš čeká šifrované spojení. Zkuste ssl://${addr.hostPort}")
     return out.toString().trimEnd()
+}
+
+/**
+ * Přeposílač (relay) pro vlastní uzel: BDK se připojuje jen na 127.0.0.1 a každé jeho spojení
+ * se tady přepošle do NOVÉHO TLS spojení k uzlu, u kterého se certifikát porovná s připnutým otiskem.
+ * Tím platí připnutí pro všechna spojení BDK, i pro automatická znovupřipojení
+ * (dřív se ověřovalo jen samostatné „zkušební“ spojení a BDK si pak otevřelo vlastní bez kontroly).
+ * Naslouchá jen na loopbacku, z jiného zařízení se k němu nikdo nepřipojí.
+ */
+class PinnedRelay private constructor(private val host: String, private val port: Int, private val store: PinStore) {
+    private val hostPort = "$host:$port"
+    private val server = ServerSocket(0, 16, InetAddress.getLoopbackAddress())
+    val localPort: Int get() = server.localPort
+    /** Poslední zjištěná neshoda certifikátu (aby šla ukázat uživateli). */
+    @Volatile var lastMismatch: CertMismatchException? = null
+        private set
+
+    init {
+        Thread({
+            while (!server.isClosed) {
+                val client = try { server.accept() } catch (e: Exception) { break }
+                Thread({ handle(client) }, "pin-relay-conn").apply { isDaemon = true }.start()
+            }
+        }, "pin-relay").apply { isDaemon = true }.start()
+    }
+
+    private fun pinnedContext(): SSLContext {
+        val tm = object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = throw CertificateException("not a server")
+            override fun checkServerTrusted(chain: Array<out X509Certificate>, authType: String?) {
+                if (chain.isEmpty()) throw CertificateException("Server neposlal certifikát")
+                val fp = sha256Fingerprint(chain[0])
+                // Relay se spouští až po verifyServerCert, otisk tedy už musí být uložený. Bez něj nic nepustíme.
+                val pinned = store.get(hostPort) ?: throw CertificateException("Certifikát uzlu není připnutý")
+                if (!pinned.equals(fp, ignoreCase = true)) {
+                    lastMismatch = CertMismatchException(hostPort, pinned, fp)
+                    throw CertificateException("Certifikát uzlu nesouhlasí s připnutým otiskem")
+                }
+            }
+            override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+        }
+        return SSLContext.getInstance("TLS").apply { init(null, arrayOf(tm), null) }
+    }
+
+    private fun handle(client: Socket) {
+        val upstream: SSLSocket = try {
+            val raw = Socket()
+            raw.connect(InetSocketAddress(host, port), 10_000)
+            val ssl = pinnedContext().socketFactory.createSocket(raw, host, port, true) as SSLSocket
+            ssl.startHandshake()   // tady se ověří otisk; při neshodě výjimka a spojení se zavře
+            ssl
+        } catch (e: Exception) {
+            runCatching { client.close() }
+            return
+        }
+        client.tcpNoDelay = true
+        // Electrum je dotaz–odpověď: když jedna strana skončí, ukončíme obě (BDK se případně připojí znovu – a znovu se ověří certifikát).
+        val closeBoth = { runCatching { client.close() }; runCatching { upstream.close() }; Unit }
+        pipe(client.getInputStream(), upstream.getOutputStream(), "c2s", closeBoth)
+        pipe(upstream.getInputStream(), client.getOutputStream(), "s2c", closeBoth)
+    }
+
+    private fun pipe(input: InputStream, output: OutputStream, name: String, onEnd: () -> Unit) {
+        Thread({
+            val buf = ByteArray(16 * 1024)
+            try {
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    output.write(buf, 0, n)
+                    output.flush()
+                }
+            } catch (_: Exception) {
+            } finally {
+                onEnd()
+            }
+        }, "pin-relay-$name").apply { isDaemon = true }.start()
+    }
+
+    fun close() { runCatching { server.close() } }
+
+    companion object {
+        private val relays = ConcurrentHashMap<String, PinnedRelay>()
+
+        /** Jeden relay na uzel po dobu běhu aplikace. */
+        fun forServer(host: String, port: Int, store: PinStore): PinnedRelay =
+            relays.compute("$host:$port") { _, old ->
+                if (old != null && !old.server.isClosed && old.store === store) old else { old?.close(); PinnedRelay(host, port, store) }
+            }!!
+
+        fun closeAll() { relays.values.forEach { it.close() }; relays.clear() }
+    }
 }

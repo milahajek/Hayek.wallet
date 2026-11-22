@@ -2,6 +2,7 @@ package io.github.milahajek.hayek
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.biometric.BiometricManager
@@ -92,10 +93,47 @@ class SecureStore(context: Context) {
         prefs.edit().remove("x_$name").remove("x_${name}_iv").commit()
     }
 
+    // ---- Hlídač otisků: pozná, že do telefonu někdo přidal nový otisk prstu ----
+    private val canaryAlias = "bio_canary_v1"
+
+    /** Vytvoří hlídací klíč, který Android zneplatní, jakmile se změní otisky prstů. */
+    fun ensureBioCanary() {
+        try {
+            val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            if (ks.containsAlias(canaryAlias)) return
+            val spec = KeyGenParameterSpec.Builder(canaryAlias, KeyProperties.PURPOSE_ENCRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setUserAuthenticationRequired(true)
+                .setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+                .setInvalidatedByBiometricEnrollment(true)
+                .build()
+            KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply { init(spec) }.generateKey()
+        } catch (_: Exception) {
+            // telefon bez otisku – hlídač nejde vytvořit, silné ověření pak stejně používá PIN
+        }
+    }
+
+    /** true = od posledního ověření se změnily otisky prstů (někdo přidal / odebral otisk). */
+    fun fingerprintsChanged(): Boolean = try {
+        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        val k = ks.getKey(canaryAlias, null) as? SecretKey
+        if (k == null) false else { Cipher.getInstance("AES/GCM/NoPadding").init(Cipher.ENCRYPT_MODE, k); false }
+    } catch (e: KeyPermanentlyInvalidatedException) {
+        true
+    } catch (e: Exception) {
+        false
+    }
+
+    fun resetBioCanary() {
+        try { KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(canaryAlias) } catch (_: Exception) {}
+        ensureBioCanary()
+    }
+
     fun wipe() {
         prefs.edit().clear().commit()
         try {
-            KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(alias)
+            KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.apply { deleteEntry(alias); deleteEntry(canaryAlias) }
         } catch (_: Exception) {}
     }
 }

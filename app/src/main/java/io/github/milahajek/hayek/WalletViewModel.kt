@@ -228,6 +228,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     /** Volat až po úspěšném ověření otiskem/PINem. */
     fun unlocked() = run {
         val secret = withContext(Dispatchers.IO) { store.loadSeed() }
+        withContext(Dispatchers.IO) { store.ensureBioCanary() }
         lnConfig = withContext(Dispatchers.IO) { runCatching { store.loadExtra(LND_KEY)?.let(::decodeLndSecret) }.getOrNull() }
         open(secret)
         if (lnConfig != null) viewModelScope.launch { lnRefreshQuiet() }
@@ -272,7 +273,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     /** Ověří vstup pro sledovací peněženku; vrací tajemství k uložení, nebo null. */
     fun checkWatch(input: String): String? = try {
         val clean = input.trim()
-        WatchOnly.descriptors(clean)
+        WatchOnly.validate(clean)
         WalletCore.WATCH_PREFIX + clean
     } catch (e: Exception) {
         message = e.message ?: "Neplatný klíč"
@@ -362,12 +363,29 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun broadcast() = run {
         val c = core ?: return@run
         val p = prepared ?: return@run
-        val txid = lock.withLock { withContext(Dispatchers.IO) { c.signAndBroadcast(p) } }
-        prepared = null
-        selected = emptySet()
-        screen = Screen.Home
-        message = "Odesláno ✔\nTXID: $txid"
-        syncNow()
+        try {
+            val txid = lock.withLock { withContext(Dispatchers.IO) { c.signAndBroadcast(p) } }
+            selected = emptySet()
+            screen = Screen.Home
+            message = "Odesláno ✔\nTXID: $txid"
+        } finally {
+            // Ať to dopadlo jakkoli, nepřipravená transakce se nesmí odeslat podruhé a stav se musí načíst z uzlu.
+            prepared = null
+            runCatching { syncNow() }
+        }
+    }
+
+    /** Ověří slova po změně otisků; při úspěchu znovu „uvěří“ otiskům a pokračuje. */
+    fun confirmFingerprintCheck(answers: Map<Int, String>): Boolean {
+        val words = seedWords?.split(" ") ?: return false
+        val ok = answers.all { (i, w) -> words.getOrNull(i)?.equals(w.trim(), ignoreCase = true) == true }
+        if (ok) {
+            store.resetBioCanary()
+            val next = fingerprintCheck
+            fingerprintCheck = null
+            next?.invoke()
+        }
+        return ok
     }
 
     // ---------- Nastavení ----------
@@ -388,6 +406,12 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Kdy aplikace odešla na pozadí (pro zámek po 2 minutách). Ve ViewModelu, aby přežil otočení displeje. */
+    var backgroundSince = 0L
+
+    /** Akce čekající na ověření slov poté, co se v telefonu změnily otisky prstů. */
+    var fingerprintCheck by mutableStateOf<(() -> Unit)?>(null)
+
     fun lockApp() {
         lnClear()
         core = null
@@ -395,12 +419,16 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         state = null
         revealSeed = false
         prepared = null
+        // Nic citlivého nesmí zůstat vidět nad zámkem ani se po odemčení vrátit.
+        message = null; txDetail = null; bumpPrepared = null; rolls = ""; fingerprintCheck = null
         if (store.hasSeed()) screen = Screen.Locked
     }
 
     fun deleteWallet() {
         lnClear()
         store.wipe()
+        notesPrefs.edit().clear().apply(); notesVersion++
+        prefs.edit().remove("ln_limit").remove("hide_balance").apply()
         dbFile.delete()
         File(dbFile.path + "-wal").delete(); File(dbFile.path + "-shm").delete()
         core = null
@@ -470,10 +498,31 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openLightning() { screen = Screen.Lightning; viewModelScope.launch { lnRefreshQuiet() } }
 
-    /** Otestuje připojení a vrátí popis uzlu (nic neukládá kromě otisku certifikátu). */
-    fun lnTest(cfg: LndConfig, onOk: (LnInfo) -> Unit) = lnRun {
-        val info = withContext(Dispatchers.IO) { lnClient(cfg).info() }
-        onOk(info)
+    /**
+     * Krok 1 nastavení: zjistí otisk certifikátu uzlu BEZ odeslání klíče.
+     * Když QR obsahoval otisk (certfp) a souhlasí, rovnou ho připne a otestuje spojení.
+     * @param onNeedConfirm otisk z QR chybí – uživatel ho musí potvrdit (porovnat s uzlem).
+     */
+    fun lnProbe(cfg: LndConfig, onNeedConfirm: (String) -> Unit, onOk: (LnInfo) -> Unit) = lnRun {
+        val fp = withContext(Dispatchers.IO) { LndClient.probeFingerprint(cfg.hostPort) }
+        when {
+            cfg.certFp == null -> onNeedConfirm(fp)
+            cfg.certFp.equals(fp, ignoreCase = true) -> {
+                pins.set("ln:${cfg.hostPort}", fp); pinVersion++
+                onOk(withContext(Dispatchers.IO) { lnClient(cfg).info() })
+            }
+            else -> throw IllegalStateException(
+                "⚠ Certifikát serveru NESOUHLASÍ s otiskem z QR kódu – připojení zastaveno, klíč nebyl odeslán.\n\n" +
+                    "Možná se někdo v síti vydává za váš uzel. Zkontrolujte, že jste ve své domácí síti, a zkuste to znovu.\n\n" +
+                    "V QR: ${cfg.certFp.take(23)}…\nServer: ${fp.take(23)}…"
+            )
+        }
+    }
+
+    /** Krok 2 (bez otisku v QR): uživatel potvrdil otisk – připnout a otestovat. */
+    fun lnTrustAndTest(cfg: LndConfig, fp: String, onOk: (LnInfo) -> Unit) = lnRun {
+        pins.set("ln:${cfg.hostPort}", fp); pinVersion++
+        onOk(withContext(Dispatchers.IO) { lnClient(cfg).info() })
     }
 
     /** Volat až po ověření (otisk) – uloží šifrovaně přístupový klíč. */

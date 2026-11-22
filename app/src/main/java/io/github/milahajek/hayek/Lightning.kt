@@ -27,10 +27,18 @@ const val LND_PERMISSIONS = "offchain:read offchain:write invoices:read invoices
 /** Vlastní ID kořenového klíče – klíč telefonu jde zneplatnit samostatně (lncli deletemacaroonid 8211), admin klíč RaspiBlitzu zůstane. */
 const val LND_ROOT_KEY_ID = 8211
 
-fun lndSetupCommand(hostPort: String = "IP-UZLU:8080") =
-    "qrencode -t ANSIUTF8 \"lndconnect://$hostPort?macaroon=\$(lncli bakemacaroon --root_key_id $LND_ROOT_KEY_ID $LND_PERMISSIONS)\""
+/**
+ * Příkaz pro RaspiBlitz: omezený klíč + otisk certifikátu LND (certfp) v jednom QR kódu.
+ * Díky otisku z QR aplikace pozná podvržený uzel ještě PŘED odesláním klíče.
+ */
+fun lndSetupCommand(hostPort: String = "IP-UZLU:8080"): String {
+    val hp = runCatching { normalizeLndHost(hostPort) }.getOrDefault("IP-UZLU:8080")
+    return "qrencode -t ANSIUTF8 \"lndconnect://$hp?macaroon=\$(lncli bakemacaroon --root_key_id $LND_ROOT_KEY_ID $LND_PERMISSIONS)" +
+        "&certfp=\$(openssl x509 -in ~/.lnd/tls.cert -noout -fingerprint -sha256 | cut -d= -f2)\""
+}
 
-data class LndConfig(val hostPort: String, val macaroonHex: String)
+/** @param certFp otisk certifikátu LND z QR kódu (pokud byl v QR) – neukládá se, slouží jen k prvnímu ověření. */
+data class LndConfig(val hostPort: String, val macaroonHex: String, val certFp: String? = null)
 
 /**
  * Přečte připojení k LND z QR kódu / textu:
@@ -47,7 +55,9 @@ fun parseLndConnect(raw: String, fallbackHost: String? = null): LndConfig {
             it.substringBefore("=").lowercase() to java.net.URLDecoder.decode(it.substringAfter("=", ""), "UTF-8")
         }
         val mac = params["macaroon"] ?: throw IllegalArgumentException("V QR kódu chybí přístupový klíč (macaroon).")
-        return LndConfig(normalizeLndHost(hostPort), macaroonToHex(mac))
+        val fp = params["certfp"]?.trim()?.uppercase()?.takeIf { it.matches(Regex("([0-9A-F]{2}:){31}[0-9A-F]{2}")) }
+            ?: params["cert"]?.takeIf { it.isNotBlank() }?.let { certFingerprintFromBase64(it) }
+        return LndConfig(normalizeLndHost(hostPort), macaroonToHex(mac), fp)
     }
     val host = fallbackHost?.takeIf { it.isNotBlank() }
         ?: throw IllegalArgumentException("Zadejte adresu uzlu (např. 192.168.1.10:8080), nebo naskenujte QR kód lndconnect.")
@@ -60,10 +70,20 @@ fun normalizeLndHost(input: String): String {
     if (s.contains(".onion")) throw IllegalArgumentException("Adresy přes Tor (.onion) zatím nepodporuji. Použijte IP adresu uzlu v domácí síti, např. 192.168.1.10:8080.")
     val hasPort = s.substringAfterLast(":", "").toIntOrNull() != null && !s.endsWith("]")
     val hp = if (hasPort) s else "$s:8080"
-    val port = hp.substringAfterLast(":").toInt()
+    val host = hp.substringBeforeLast(":")
+    val port = hp.substringAfterLast(":").toIntOrNull() ?: throw IllegalArgumentException("Neplatný port.")
+    // Jen IP adresa nebo běžné jméno – žádné „@“, lomítka, uvozovky ani znaky pro příkazovou řádku.
+    val okHost = host.matches(Regex("[A-Za-z0-9]([A-Za-z0-9.-]{0,250}[A-Za-z0-9])?")) || host.matches(Regex("\\[[0-9A-Fa-f:.]+]"))
+    if (!okHost) throw IllegalArgumentException("Neplatná adresa uzlu: $host")
     if (port !in 1..65535) throw IllegalArgumentException("Neplatný port.")
-    return hp
+    return "$host:$port"
 }
+
+/** SHA-256 otisk certifikátu předaného v lndconnect jako base64url (DER). */
+fun certFingerprintFromBase64(b64: String): String? = runCatching {
+    val der = Base64.getUrlDecoder().decode(b64.replace('+', '-').replace('/', '_').trimEnd('='))
+    java.security.MessageDigest.getInstance("SHA-256").digest(der).joinToString(":") { "%02X".format(it) }
+}.getOrNull()
 
 fun macaroonToHex(mac: String): String {
     val m = mac.trim().replace("\\s".toRegex(), "")
@@ -120,17 +140,17 @@ data class LnHistoryItem(val incoming: Boolean, val amountSat: Long, val feeSat:
 class LndClient(val config: LndConfig, private val pins: PinStore) {
     private val pinKey = "ln:${config.hostPort}"
 
-    /** Připnutí certifikátu: první spojení otisk uloží, další ho musí mít stejný. */
+    /**
+     * Certifikát musí odpovídat připnutému otisku. Otisk se připíná VÝSLOVNĚ při nastavení
+     * (z QR kódu, nebo po potvrzení uživatelem) – přístupový klíč se nikdy nepošle neověřenému serveru.
+     */
     private val trust = object : X509TrustManager {
         override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = throw CertificateException("not a server")
         override fun checkServerTrusted(chain: Array<out X509Certificate>, authType: String?) {
             if (chain.isEmpty()) throw CertificateException("Uzel neposlal certifikát")
             val fp = sha256Fingerprint(chain[0])
-            val pinned = pins.get(pinKey)
-            when {
-                pinned == null -> pins.set(pinKey, fp)
-                !pinned.equals(fp, ignoreCase = true) -> throw CertificateException("PIN:" + pinned + "|" + fp)
-            }
+            val pinned = pins.get(pinKey) ?: throw CertificateException("Certifikát Lightning uzlu není ověřený")
+            if (!pinned.equals(fp, ignoreCase = true)) throw CertificateException("PIN:" + pinned + "|" + fp)
         }
         override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
     }
@@ -314,6 +334,28 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
     }
 
     companion object {
+        /** Jen zjistí otisk certifikátu uzlu (TLS handshake) – nic se neposílá, žádný klíč. */
+        fun probeFingerprint(hostPort: String): String {
+            var seen: String? = null
+            val capture = object : X509TrustManager {
+                override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = throw CertificateException("not a server")
+                override fun checkServerTrusted(chain: Array<out X509Certificate>, authType: String?) {
+                    if (chain.isEmpty()) throw CertificateException("Uzel neposlal certifikát")
+                    seen = sha256Fingerprint(chain[0])
+                }
+                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+            }
+            val ctx = SSLContext.getInstance("TLS").apply { init(null, arrayOf(capture), null) }
+            val host = hostPort.substringBeforeLast(":").removePrefix("[").removeSuffix("]")
+            val port = hostPort.substringAfterLast(":").toInt()
+            java.net.Socket().use { raw ->
+                raw.connect(java.net.InetSocketAddress(host, port), 10_000)
+                raw.soTimeout = 10_000
+                (ctx.socketFactory.createSocket(raw, host, port, false) as javax.net.ssl.SSLSocket).use { it.startHandshake() }
+            }
+            return seen ?: throw IOException("Certifikát uzlu se nepodařilo přečíst")
+        }
+
         /** Jména uzlů se mění zřídka – pamatujeme si je po dobu běhu aplikace. */
         private val aliasCache = java.util.concurrent.ConcurrentHashMap<String, Pair<String?, String?>>()
 

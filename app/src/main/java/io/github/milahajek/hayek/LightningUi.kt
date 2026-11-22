@@ -404,10 +404,11 @@ fun LnSetupScreen(vm: WalletViewModel, act: FragmentActivity) {
     var mac by remember { mutableStateOf("") }
     var scanning by remember { mutableStateOf(false) }
     var tested by remember { mutableStateOf<Pair<LndConfig, LnInfo>?>(null) }
+    var confirmFp by remember { mutableStateOf<Pair<LndConfig, String>?>(null) }
     fun tryConnect(raw: String, h: String) {
         val cfg = try { parseLndConnect(raw, h) } catch (e: Exception) { vm.message = e.message; return }
-        host = cfg.hostPort
-        vm.lnTest(cfg) { info -> tested = cfg to info }
+        host = cfg.hostPort; tested = null; confirmFp = null
+        vm.lnProbe(cfg, onNeedConfirm = { fp -> confirmFp = cfg to fp }, onOk = { info -> tested = cfg to info })
     }
     if (scanning) QrScanDialog("Načíst QR z RaspiBlitzu", onDismiss = { scanning = false }, onResult = { raw ->
         scanning = false
@@ -417,8 +418,8 @@ fun LnSetupScreen(vm: WalletViewModel, act: FragmentActivity) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text("Připojit Lightning uzel", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Text(
-            "Peněženka bude ovládat LND na vašem RaspiBlitzu. Peníze zůstávají v kanálech na uzlu, telefon dostane jen omezený klíč: " +
-                "umí platit a vytvářet faktury, ale nemůže vybrat bitcoiny z uzlu ani zavírat kanály.",
+            "Peněženka bude ovládat LND na vašem RaspiBlitzu. Telefon dostane omezený klíč: umí platit z kanálů a vytvářet faktury, " +
+                "ale nemůže poslat bitcoiny z uzlu na blockchain, otevírat ani zavírat kanály. Prostředky v kanálech utratit umí – proto je tu limit na jednu platbu.",
             fontSize = 14.sp
         )
         Spacer(Modifier.height(12.dp))
@@ -446,6 +447,25 @@ fun LnSetupScreen(vm: WalletViewModel, act: FragmentActivity) {
         Spacer(Modifier.height(8.dp))
         GlassButton(onClick = { tryConnect(mac, host) }, enabled = mac.isNotBlank() && !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("Vyzkoušet spojení") }
 
+        confirmFp?.let { (cfg, fp) ->
+            Spacer(Modifier.height(12.dp))
+            GlassCard(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("Ověřte certifikát uzlu", fontWeight = FontWeight.Bold)
+                    Text("QR kód neobsahoval otisk certifikátu. Přístupový klíč zatím nebyl odeslán. Porovnejte otisk se svým uzlem:", fontSize = 13.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(fp.chunked(24).joinToString("\n"), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                    Spacer(Modifier.height(6.dp))
+                    Text("Na RaspiBlitzu: openssl x509 -in ~/.lnd/tls.cert -noout -fingerprint -sha256", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(10.dp))
+                    HayekButton(onClick = { confirmFp = null; vm.lnTrustAndTest(cfg, fp) { info -> tested = cfg to info } }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) {
+                        Text("Otisk souhlasí – připojit")
+                    }
+                    TextButton(onClick = { confirmFp = null }, Modifier.fillMaxWidth()) { Text("Nesouhlasí – zrušit") }
+                }
+            }
+        }
+
         tested?.let { (cfg, info) ->
             Spacer(Modifier.height(12.dp))
             GlassCard(Modifier.fillMaxWidth()) {
@@ -472,12 +492,12 @@ fun LnSetupScreen(vm: WalletViewModel, act: FragmentActivity) {
 
 /** Sekce v Nastavení. */
 @Composable
-fun LnSettingsSection(vm: WalletViewModel) {
+fun LnSettingsSection(vm: WalletViewModel, act: FragmentActivity) {
     var confirm by remember { mutableStateOf(false) }
     var limit by remember { mutableStateOf(vm.lnLimit.toString()) }
     Text("⚡ Lightning (váš LND uzel)", fontSize = 20.sp, fontWeight = FontWeight.Bold)
     if (!vm.lnConfigured) {
-        Text("Platby přes Lightning z vašeho RaspiBlitzu. Telefon dostane jen omezený klíč – bitcoiny z uzlu vybrat nemůže.", fontSize = 14.sp)
+        Text("Platby přes Lightning z vašeho RaspiBlitzu. Telefon dostane omezený klíč – nemůže poslat bitcoiny z uzlu na blockchain ani zavírat kanály.", fontSize = 14.sp)
         Spacer(Modifier.height(8.dp))
         HayekButton(onClick = { vm.screen = Screen.LnSetup }, Modifier.fillMaxWidth()) { Icon(Icons.Default.Bolt, null); Spacer(Modifier.width(6.dp)); Text("Připojit Lightning") }
         return
@@ -487,17 +507,22 @@ fun LnSettingsSection(vm: WalletViewModel) {
     Spacer(Modifier.height(8.dp))
     OutlinedTextField(value = limit, onValueChange = { limit = it.filter(Char::isDigit) }, label = { Text("Limit na jednu platbu (sat)") },
         singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        supportingText = { Text("Pojistka pro případ, že by vám někdo vzal odemčený telefon.") })
+        supportingText = { Text("Pojistka pro případ, že by vám někdo vzal odemčený telefon. Klíč v telefonu umí utratit vše, co je v kanálech – limit hlídá aplikace. Zvýšení limitu vyžaduje otisk prstu.") })
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         GlassButton(onClick = { confirm = true }, Modifier.weight(1f)) { Text("Odpojit") }
-        HayekButton(onClick = { limit.toLongOrNull()?.let { vm.saveLnLimit(it); vm.message = "Limit uložen: ${formatSat(it)}." } },
+        HayekButton(onClick = {
+            limit.toLongOrNull()?.let { l ->
+                val save = { vm.saveLnLimit(l); vm.message = "Limit uložen: ${formatSat(l)}." }
+                if (l > vm.lnLimit) act.auth(vm, "Zvýšit limit Lightning plateb", strong = true) { save() } else save()
+            }
+        },
             enabled = limit.toLongOrNull() != null, modifier = Modifier.weight(1f)) { Text("Uložit limit") }
     }
     if (confirm) AlertDialog(
         onDismissRequest = { confirm = false },
         title = { Text("Odpojit Lightning?") },
         text = { Text("Telefon zapomene přístupový klíč a certifikát uzlu. Peníze v kanálech zůstávají na uzlu. Klíč úplně zneplatníte na uzlu příkazem: lncli deletemacaroonid $LND_ROOT_KEY_ID") },
-        confirmButton = { TextButton(onClick = { confirm = false; vm.lnRemove() }) { Text("Odpojit") } },
+        confirmButton = { TextButton(onClick = { confirm = false; act.auth(vm, "Odpojit Lightning") { vm.lnRemove() } }) { Text("Odpojit") } },
         dismissButton = { TextButton(onClick = { confirm = false }) { Text("Zrušit") } }
     )
 }

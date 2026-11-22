@@ -1,0 +1,7 @@
+Bezpečnostní aktualizace po nezávislé revizi:
+• Certifikát vašeho uzlu se ověřuje u každého spojení (i při znovupřipojení).
+• Zámek po 2 min na pozadí nejde obejít otočením telefonu.
+• Nový otisk prstu v telefonu vyžaduje potvrzení slovy ze zálohy.
+• Lightning: certifikát uzlu se ověří před odesláním klíče (otisk je v QR z uzlu), kontrola adresy uzlu, zvýšení limitu jen s otiskem.
+• Bezpečnější odeslání při výpadku spojení (žádná dvojí platba).
+• Zákaz zálohy a přenosu dat na jiný telefon, citlivé údaje ve schránce se mažou, změna serveru vyžaduje ověření.
