@@ -1,0 +1,4 @@
+Úvodní průvodce: proč kostky, 24 slov a vlastní uzel.
+Urychlení nepotvrzené transakce vyšším poplatkem (RBF).
+Poznámky k transakcím (jen v telefonu) a detail transakce.
+Skrytí zůstatku jedním klepnutím.

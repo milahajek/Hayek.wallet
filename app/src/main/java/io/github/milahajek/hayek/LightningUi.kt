@@ -45,7 +45,7 @@ fun LightningHomeCard(vm: WalletViewModel) {
                 Text("Lightning", fontWeight = FontWeight.Bold)
                 Text(
                     when {
-                        b != null -> "Můžete poslat ${formatSat(b.canSendSat)}"
+                        b != null -> "Můžete poslat ${vm.amount(b.canSendSat)}"
                         vm.lnError != null -> "Uzel nedostupný – klepněte pro detail"
                         else -> "Načítám z vašeho uzlu…"
                     },
@@ -69,10 +69,10 @@ fun LightningScreen(vm: WalletViewModel) {
                     Icon(Icons.Default.Bolt, null, tint = Bolt)
                     Text("Lightning · ${i?.alias ?: vm.lnConfig?.hostPort ?: ""}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Text(formatSat(b?.canSendSat ?: 0), fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                Text(vm.amount(b?.canSendSat ?: 0), fontSize = 30.sp, fontWeight = FontWeight.Bold)
                 Text("můžete poslat", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
                 Spacer(Modifier.height(6.dp))
-                Text("Můžete přijmout: ${formatSat(b?.canReceiveSat ?: 0)}", fontSize = 13.sp)
+                Text("Můžete přijmout: ${vm.amount(b?.canReceiveSat ?: 0)}", fontSize = 13.sp)
                 if ((b?.pendingSat ?: 0) > 0) Text("Otevírá se kanál: ${formatSat(b!!.pendingSat)}", fontSize = 13.sp, color = HayekOrange)
                 if (i != null && i.activeChannels == 0) Text("Uzel nemá žádný aktivní kanál.", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
             }
@@ -102,7 +102,7 @@ fun LightningScreen(vm: WalletViewModel) {
                     leadingContent = {
                         Icon(if (h.incoming) Icons.Default.CallReceived else Icons.Default.Bolt, null, tint = if (h.incoming) Green else Bolt)
                     },
-                    headlineContent = { Text((if (h.incoming) "+" else "−") + formatSat(h.amountSat), fontWeight = FontWeight.SemiBold) },
+                    headlineContent = { Text(if (vm.hideBalance) "••••• sat" else (if (h.incoming) "+" else "−") + formatSat(h.amountSat), fontWeight = FontWeight.SemiBold) },
                     supportingContent = {
                         Text(date + (if (h.feeSat > 0) " · poplatek ${h.feeSat} sat" else "") + (if (h.memo.isNotBlank()) " · ${h.memo}" else ""), fontSize = 12.sp)
                     }

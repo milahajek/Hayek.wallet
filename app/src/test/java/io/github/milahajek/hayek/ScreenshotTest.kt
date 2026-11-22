@@ -22,12 +22,13 @@ import org.robolectric.annotation.GraphicsMode
 class ScreenshotTest {
     private val fakeWords = "duck soft salt virtual tattoo actor swallow cradle brother arch adjust icon degree canal ugly liquid churn obtain link fun sight obscure survey fossil"
 
-    private fun shoot(name: String, setup: (WalletViewModel) -> Unit) {
+    private fun shoot(name: String, screen: Boolean = false, setup: (WalletViewModel) -> Unit) {
         val act = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         val vm = ViewModelProvider(act)[WalletViewModel::class.java]
         setup(vm)
         repeat(5) { shadowOf(Looper.getMainLooper()).idle(); Thread.sleep(50) }
-        act.window.decorView.captureRoboImage("build/shots/$name.png")
+        if (screen) com.github.takahirom.roborazzi.captureScreenRoboImage("build/shots/$name.png")
+        else act.window.decorView.captureRoboImage("build/shots/$name.png")
     }
 
     private val state = WalletState(
@@ -82,7 +83,7 @@ class ScreenshotTest {
     @Config(qualifiers = "w411dp-h1800dp-xxhdpi")
     @Test fun s18_donate() = shoot("18_dary") { it.setThemeMode(2); it.connected = true; it.setServer("ssl://192.168.0.10:50002"); it.screen = Screen.Settings }
 
-    @Test fun s1_welcome() = shoot("1_uvod") { it.setThemeMode(0) }
+    @Test fun s1_welcome() = shoot("1_uvod") { it.setThemeMode(0); it.finishIntro(Screen.Welcome) }
     @Test fun s2_dice() = shoot("2_kostky") { it.screen = Screen.Dice; it.rolls = "35216614523362154126635214513624436521164352614253366" }
     @Test fun s3_seed() = shoot("3_slova") { it.screen = Screen.ShowSeed(fakeWords) }
     @Test fun s4_home() = shoot("4_penezenka") { it.setThemeMode(0); it.state = state; it.coins = coins; it.connected = true; it.screen = Screen.Home }
@@ -115,4 +116,15 @@ class ScreenshotTest {
     @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
     @Test fun s22_ln_setup() = shoot("22_ln_pripojit") { it.setThemeMode(0); it.connected = true; it.setServer("ssl://192.168.0.10:50022"); it.screen = Screen.LnSetup }
     @Test fun s23_home_ln() = shoot("23_penezenka_lightning") { it.setThemeMode(0); it.state = state; it.coins = coins; lnState(it); it.screen = Screen.Home }
+
+    @Test fun s24_intro() = shoot("24_pruvodce") { it.setThemeMode(0) }
+    @Test fun s25_intro_dice() = shoot("25_pruvodce_tmavy") { it.setThemeMode(2); it.screen = Screen.Intro(Screen.Settings) }
+    @Test fun s26_hidden() = shoot("26_skryty_zustatek") { it.setThemeMode(0); it.state = state; it.coins = coins; it.connected = true; if (!it.hideBalance) it.toggleHideBalance(); it.screen = Screen.Home }
+    private val pendingOut = TxItem("9f8e7d6c5b4a39281706f5e4d3c2b1a098765433", -40_281, 281, false, null, 1795700000, feeRate = 2, canBump = true)
+    @Test fun s27_txdetail() = shoot("27_detail_transakce", screen = true) {
+        it.setThemeMode(0); if (it.hideBalance) it.toggleHideBalance()
+        it.state = state.copy(txs = listOf(pendingOut) + state.txs); it.connected = true
+        it.setNote(pendingOut.txid, "Nájem – listopad")
+        it.screen = Screen.Home; it.txDetail = pendingOut
+    }
 }

@@ -16,6 +16,9 @@ import org.bitcoindevkit.Txid
 import org.bitcoindevkit.Persister
 import org.bitcoindevkit.Psbt
 import org.bitcoindevkit.TxBuilder
+import org.bitcoindevkit.UnconfirmedTx
+import org.bitcoindevkit.CreateTxException
+import org.bitcoindevkit.BumpFeeTxBuilder
 import org.bitcoindevkit.Wallet
 import java.io.File
 import java.security.MessageDigest
@@ -58,7 +61,14 @@ data class TxItem(
     val confirmed: Boolean,
     val height: Int?,
     val time: Long?,
+    /** Poplatek v sat/vB (pokud je známý). */
+    val feeRate: Long? = null,
+    /** Odeslaná nepotvrzená transakce s RBF – jde urychlit vyšším poplatkem. */
+    val canBump: Boolean = false,
 )
+
+/** Připravené urychlení (RBF): nová transakce nahrazující původní. */
+data class PreparedBump(val psbt: Psbt, val oldTxid: String, val oldFeeSat: Long, val newFeeSat: Long, val feeRate: Long, val recipientSat: Long)
 
 data class WalletState(
     val confirmedSat: Long,
@@ -298,10 +308,13 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
                     txid.toString(), d.balanceDelta, d.fee?.toSat()?.toLong(), true,
                     pos.confirmationBlockTime.blockId.height.toInt(),
                     pos.confirmationBlockTime.confirmationTime.toLong(),
+                    feeRate = d.feeRate?.toSatPerVbCeil()?.toLong(),
                 )
                 is ChainPosition.Unconfirmed -> TxItem(
                     txid.toString(), d.balanceDelta, d.fee?.toSat()?.toLong(), false,
                     null, pos.timestamp?.toLong(),
+                    feeRate = d.feeRate?.toSatPerVbCeil()?.toLong(),
+                    canBump = !watchOnly && d.balanceDelta < 0 && d.fee != null && ctx.transaction.isExplicitlyRbf(),
                 )
             }
         }.sortedWith(compareBy<TxItem> { it.confirmed }.thenByDescending { it.height ?: 0 })
@@ -364,6 +377,46 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
         check(wallet.sign(p.psbt)) { "Transakci se nepodařilo podepsat" }
         val tx = p.psbt.extractTx()
         return withClient { it.transactionBroadcast(tx) }.toString()
+    }
+
+    /**
+     * Urychlení nepotvrzené odeslané transakce (Replace-By-Fee): stejná platba, vyšší poplatek.
+     * Příjemce dostane stejnou částku, poplatek navíc se vezme z drobných (u „poslat vše“ z odesílané částky).
+     */
+    fun prepareBump(txid: String, feeRateSatVb: Long): PreparedBump {
+        check(!watchOnly) { "Sledovací peněženka nemůže odesílat." }
+        require(feeRateSatVb in 1..500) { "Poplatek musí být 1–500 sat/vB" }
+        val id = Txid.fromString(txid)
+        val old = wallet.txDetails(id) ?: throw IllegalArgumentException("Transakce v peněžence není.")
+        val psbt = try {
+            BumpFeeTxBuilder(id, FeeRate.fromSatPerVb(feeRateSatVb.toULong())).finish(wallet)
+        } catch (e: CreateTxException.FeeRateTooLow) {
+            val req = Regex("\\d+").find(e.message.orEmpty())?.value?.toLongOrNull()
+            val vb = req?.let { kotlin.math.ceil(it * 4 / 1000.0).toLong() }
+            throw IllegalArgumentException("Nový poplatek je příliš nízký." + (vb?.let { " Musí být aspoň $it sat/vB." } ?: ""))
+        } catch (e: CreateTxException.FeeTooLow) {
+            throw IllegalArgumentException("Nový poplatek je příliš nízký – zvyšte ho.")
+        } catch (e: CreateTxException.CoinSelection) {
+            throw IllegalArgumentException("Na vyšší poplatek nemáte v peněžence dost prostředků.")
+        } catch (e: CreateTxException.InsufficientFunds) {
+            throw IllegalArgumentException("Na vyšší poplatek nemáte v peněžence dost prostředků.")
+        } catch (e: CreateTxException) {
+            throw IllegalArgumentException("Transakci nelze urychlit (${e::class.simpleName}). Možná už je potvrzená – obnovte peněženku.")
+        }
+        val tx = psbt.extractTxUncheckedFeeRate()
+        val recipient = tx.output().filter { !wallet.isMine(it.scriptPubkey) }.sumOf { it.value.toSat().toLong() }
+        return PreparedBump(psbt, txid, old.fee?.toSat()?.toLong() ?: 0, psbt.fee().toLong(), feeRateSatVb, recipient)
+    }
+
+    fun signAndBroadcastBump(b: PreparedBump): String {
+        check(!watchOnly) { "Sledovací peněženka nemůže podepisovat." }
+        check(wallet.sign(b.psbt)) { "Transakci se nepodařilo podepsat" }
+        val tx = b.psbt.extractTx()
+        val newId = withClient { it.transactionBroadcast(tx) }.toString()
+        // Peněženka hned uvidí náhradu (původní transakce zmizí, nečeká se na další synchronizaci).
+        wallet.applyUnconfirmedTxs(listOf(UnconfirmedTx(tx, (System.currentTimeMillis() / 1000).toULong())))
+        wallet.persist(persister)
+        return newId
     }
 
     /** Doporučený poplatek z vlastního uzlu (sat/vB) pro potvrzení do ~6 bloků. */

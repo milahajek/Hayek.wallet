@@ -19,6 +19,8 @@ import java.io.File
 sealed interface Screen {
     data object Locked : Screen
     data object Welcome : Screen
+    /** Úvodní průvodce; [back] = kam se vrátit. */
+    data class Intro(val back: Screen) : Screen
     data object Dice : Screen
     data class ShowSeed(val words: String) : Screen
     data class Verify(val words: String, val positions: List<Int>) : Screen
@@ -49,7 +51,65 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     private val lock = Mutex()
     private var core: WalletCore? = null
 
-    var screen by mutableStateOf<Screen>(if (store.hasSeed()) Screen.Locked else Screen.Welcome)
+    var screen by mutableStateOf<Screen>(
+        when {
+            store.hasSeed() -> Screen.Locked
+            !prefs.getBoolean("intro_seen", false) -> Screen.Intro(Screen.Welcome)
+            else -> Screen.Welcome
+        }
+    )
+
+    fun finishIntro(back: Screen) { prefs.edit().putBoolean("intro_seen", true).apply(); screen = back }
+
+    // ---------- Skrytí zůstatku ----------
+    var hideBalance by mutableStateOf(prefs.getBoolean("hide_balance", false))
+        private set
+    fun toggleHideBalance() { hideBalance = !hideBalance; prefs.edit().putBoolean("hide_balance", hideBalance).apply() }
+    /** Částka, nebo hvězdičky, pokud je zůstatek skrytý. */
+    fun amount(sat: Long, sign: Boolean = false): String =
+        if (hideBalance) "••••• sat" else (if (sign && sat >= 0) "+" else "") + formatSat(sat)
+
+    // ---------- Poznámky k transakcím (jen v telefonu) ----------
+    private val notesPrefs = app.getSharedPreferences("notes", Context.MODE_PRIVATE)
+    var notesVersion by mutableStateOf(0)
+        private set
+    fun note(txid: String): String = notesPrefs.getString(txid, "").orEmpty()
+    fun setNote(txid: String, text: String) {
+        notesPrefs.edit().apply { if (text.isBlank()) remove(txid) else putString(txid, text.trim().take(200)) }.apply()
+        notesVersion++
+    }
+
+    // ---------- Detail transakce a urychlení (RBF) ----------
+    var txDetail by mutableStateOf<TxItem?>(null)
+    var bumpPrepared by mutableStateOf<PreparedBump?>(null)
+    var bumpSuggested by mutableStateOf<Long?>(null)
+
+    fun openTxDetail(tx: TxItem) {
+        txDetail = tx; bumpPrepared = null; bumpSuggested = null
+        val c = core ?: return
+        if (tx.canBump) viewModelScope.launch {
+            val r = try { lock.withLock { withContext(Dispatchers.IO) { c.suggestedFeeRate() } } } catch (_: Exception) { 2L }
+            bumpSuggested = maxOf(r, (tx.feeRate ?: 1) + 1)
+        }
+    }
+
+    fun prepareBump(rate: String) = run {
+        val c = core ?: return@run
+        val tx = txDetail ?: return@run
+        val r = rate.trim().toLongOrNull() ?: throw IllegalArgumentException("Zadejte poplatek v sat/vB.")
+        bumpPrepared = lock.withLock { withContext(Dispatchers.IO) { c.prepareBump(tx.txid, r) } }
+    }
+
+    /** Volat až po ověření otiskem. */
+    fun broadcastBump() = run {
+        val c = core ?: return@run
+        val b = bumpPrepared ?: return@run
+        val newId = lock.withLock { withContext(Dispatchers.IO) { c.signAndBroadcastBump(b) } }
+        note(b.oldTxid).takeIf { it.isNotBlank() }?.let { setNote(newId, it) }
+        bumpPrepared = null; txDetail = null
+        message = "Poplatek zvýšen ✔\nNová transakce nahradila původní.\nTXID: $newId"
+        syncNow()
+    }
     var state by mutableStateOf<WalletState?>(null)
     var busy by mutableStateOf(false)
     var message by mutableStateOf<String?>(null)

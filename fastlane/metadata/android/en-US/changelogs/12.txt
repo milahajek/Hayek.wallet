@@ -1,0 +1,4 @@
+Introductory guide: why dice, the 24 words and your own node.
+Speed up an unconfirmed transaction with a higher fee (RBF).
+Transaction notes (stored on the phone only) and transaction details.
+Hide balance with one tap.

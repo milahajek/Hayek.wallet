@@ -145,6 +145,7 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
 
     fun back() {
         when {
+            screen is Screen.Intro -> vm.finishIntro(screen.back)
             screen == Screen.Coins -> vm.screen = vm.coinsReturn
             screen == Screen.Export || screen == Screen.Seed || screen == Screen.LnSetup -> { vm.revealSeed = false; vm.screen = Screen.Settings }
             screen == Screen.LnPay || screen == Screen.LnReceive -> vm.openLightning()
@@ -153,7 +154,7 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
             setup -> vm.screen = Screen.Welcome
         }
     }
-    if (screen in inWallet || setup) BackHandler { back() }
+    if (screen in inWallet || setup || (screen is Screen.Intro && screen.back != Screen.Welcome)) BackHandler { back() }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -197,6 +198,7 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
             when (screen) {
                 Screen.Locked -> LockedScreen(vm, act)
                 Screen.Welcome -> WelcomeScreen(vm)
+                is Screen.Intro -> IntroScreen(vm, screen.back)
                 Screen.Dice -> DiceScreen(vm)
                 is Screen.ShowSeed -> ShowSeedScreen(screen.words, vm)
                 is Screen.Verify -> IncognitoKeyboard { VerifyScreen(screen, vm, act) }
@@ -204,7 +206,7 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                 Screen.WatchImport -> IncognitoKeyboard { WatchImportScreen(vm, act) }
                 Screen.Coins -> CoinsScreen(vm)
                 Screen.Export -> ExportScreen(vm)
-                Screen.Home -> HomeScreen(vm)
+                Screen.Home -> HomeScreen(vm, act)
                 Screen.Receive -> ReceiveScreen(vm)
                 Screen.Send -> SendScreen(vm, act)
                 Screen.Settings -> SettingsScreen(vm, act)
@@ -289,7 +291,10 @@ fun WelcomeScreen(vm: WalletViewModel) {
         TextButton(onClick = { vm.screen = Screen.WatchImport }, Modifier.fillMaxWidth()) {
             Icon(Icons.Default.Visibility, null); Spacer(Modifier.width(6.dp)); Text("Jen sledovat peněženku (zpub / deskriptor)")
         }
-        Spacer(Modifier.height(20.dp))
+        TextButton(onClick = { vm.screen = Screen.Intro(Screen.Welcome) }, Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.School, null); Spacer(Modifier.width(6.dp)); Text("Průvodce – proč kostky a jak na to")
+        }
+        Spacer(Modifier.height(12.dp))
         Text("Server: ${vm.serverUrl.ifBlank { "zatím nenastaven (zadáte v ⚙ Nastavení)" }}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -451,7 +456,7 @@ fun formatSat(sat: Long): String = String.format(Locale.forLanguageTag("cs"), "%
 fun formatBtc(sat: Long): String = String.format(Locale.US, "%.8f BTC", sat / 100_000_000.0)
 
 @Composable
-fun HomeScreen(vm: WalletViewModel) {
+fun HomeScreen(vm: WalletViewModel, act: FragmentActivity) {
     val ctx = LocalContext.current
     val st = vm.state
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -468,12 +473,18 @@ fun HomeScreen(vm: WalletViewModel) {
             Spacer(Modifier.height(12.dp))
         }
         GlassCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Zůstatek", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(formatSat(st?.totalSat ?: 0), fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                Text(formatBtc(st?.totalSat ?: 0), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if ((st?.pendingSat ?: 0) > 0) {
-                    Text("z toho čeká na potvrzení: ${formatSat(st!!.pendingSat)}", color = Orange, fontSize = 13.sp)
+            Box(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(20.dp).fillMaxWidth().clickable { vm.toggleHideBalance() }, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Zůstatek", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(vm.amount(st?.totalSat ?: 0), fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Text(if (vm.hideBalance) "klepnutím zobrazíte" else formatBtc(st?.totalSat ?: 0), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if ((st?.pendingSat ?: 0) > 0 && !vm.hideBalance) {
+                        Text("z toho čeká na potvrzení: ${formatSat(st!!.pendingSat)}", color = Orange, fontSize = 13.sp)
+                    }
+                }
+                IconButton(onClick = { vm.toggleHideBalance() }, Modifier.align(Alignment.TopEnd).padding(4.dp)) {
+                    Icon(if (vm.hideBalance) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        if (vm.hideBalance) "Zobrazit zůstatek" else "Skrýt zůstatek", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -499,15 +510,18 @@ fun HomeScreen(vm: WalletViewModel) {
         val txs = st?.txs.orEmpty()
         if (txs.isEmpty()) Text(if (vm.busy) "Načítám z vašeho uzlu…" else "Zatím žádné transakce.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(Modifier.fillMaxSize()) {
-            items(txs, key = { it.txid }) { tx -> TxRow(tx) { openTx(ctx, vm, vm.txLink(tx.txid)) } }
+            items(txs, key = { it.txid }) { tx -> TxRow(tx, vm) { vm.openTxDetail(tx) } }
         }
     }
+    vm.txDetail?.let { TxDetailDialog(it, vm, act) }
 }
 
 @Composable
-fun TxRow(tx: TxItem, onClick: () -> Unit) {
+fun TxRow(tx: TxItem, vm: WalletViewModel, onClick: () -> Unit) {
     val incoming = tx.deltaSat >= 0
     val date = tx.time?.let { SimpleDateFormat("d. M. yyyy HH:mm", Locale.forLanguageTag("cs")).format(Date(it * 1000)) }
+    @Suppress("UNUSED_VARIABLE") val nv = vm.notesVersion
+    val note = vm.note(tx.txid)
     ListItem(
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         modifier = Modifier.clickable(onClick = onClick),
@@ -515,8 +529,13 @@ fun TxRow(tx: TxItem, onClick: () -> Unit) {
             Icon(if (incoming) Icons.Default.CallReceived else Icons.Default.CallMade, null,
                 tint = if (incoming) Color(0xFF2E9E4F) else Orange)
         },
-        headlineContent = { Text((if (incoming) "+" else "") + formatSat(tx.deltaSat), fontWeight = FontWeight.SemiBold) },
-        supportingContent = { Text(if (tx.confirmed) "Potvrzeno${date?.let { " · $it" } ?: ""}" else "Čeká na potvrzení", fontSize = 13.sp) },
+        headlineContent = { Text(vm.amount(tx.deltaSat, sign = true), fontWeight = FontWeight.SemiBold) },
+        supportingContent = {
+            Column {
+                if (note.isNotBlank()) Text(note, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                Text(if (tx.confirmed) "Potvrzeno${date?.let { " · $it" } ?: ""}" else "Čeká na potvrzení" + if (tx.canBump) " · lze urychlit" else "", fontSize = 13.sp)
+            }
+        },
         trailingContent = { Text(tx.txid.take(8) + "…", fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
     )
     HorizontalDivider()
@@ -833,6 +852,11 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
             Spacer(Modifier.height(20.dp))
             GlassButton(onClick = { confirmDelete = true }, Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Smazat peněženku z telefonu") }
+        }
+
+        HorizontalDivider(Modifier.padding(vertical = 20.dp))
+        GlassButton(onClick = { vm.screen = Screen.Intro(Screen.Settings) }, Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.School, null); Spacer(Modifier.width(6.dp)); Text("Průvodce: proč kostky, slova a vlastní uzel")
         }
 
         // Podpora vývoje – adresa pro dary
