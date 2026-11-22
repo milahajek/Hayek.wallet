@@ -36,7 +36,7 @@ val PUBLIC_SERVERS = listOf(
     "Seth For Privacy" to "ssl://fulcrum.sethforprivacy.com:50002",
 )
 
-fun isPublicServer(url: String) = PUBLIC_SERVERS.any { it.second == url.trim() }
+fun isPublicServer(url: String) = PUBLIC_SERVERS.any { it.second == normalizeServerUrl(url) }
 
 /** Žádný výchozí server – každý uživatel zadá svůj vlastní uzel (nebo si vědomě vybere veřejný). */
 const val DEFAULT_SERVER = ""
@@ -180,7 +180,7 @@ fun connect(url: String, pins: PinStore): ElectrumClient {
     // Vlastní uzel (certifikát podepsaný sám sebou): ověříme ho proti uloženému otisku.
     // Veřejný server: certifikát ověří certifikační autorita (připínání by se rozbíjelo při každé obnově).
     if (addr.ssl && !public) verifyServerCert(addr.host, addr.port, pins)
-    val client = ElectrumClient(url.trim(), null, 20.toUByte(), 2.toUByte(), public)
+    val client = ElectrumClient(normalizeServerUrl(url), null, 20.toUByte(), 2.toUByte(), public)
     val genesis = client.serverFeatures().genesisHash.toString()
     check(genesis == MAINNET_GENESIS) { "Server není Bitcoin mainnet – odmítám se připojit." }
     return client

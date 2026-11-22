@@ -1,0 +1,1 @@
+Public servers can be tested without saving; server address cleanup (invisible characters, spaces), clear button, clearer address errors.

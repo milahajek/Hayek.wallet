@@ -642,6 +642,7 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(value = url, onValueChange = { url = it.trim() }, label = { Text("Adresa serveru") },
             placeholder = { Text("ssl://IP-uzlu:50002") },
+            trailingIcon = { if (url.isNotEmpty()) IconButton(onClick = { url = "" }) { Icon(Icons.Default.Close, "Vymazat") } },
             singleLine = true, modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false))
         Spacer(Modifier.height(8.dp))
@@ -725,15 +726,19 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
                         }
                         if (understood) {
                             Spacer(Modifier.height(4.dp))
+                            Text("„Vyzkoušet“ server jen otestuje (neposílá mu vaše adresy). „Použít“ ho uloží.",
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             PUBLIC_SERVERS.forEach { (name, u) ->
-                                TextButton(onClick = {
-                                    url = u; vm.setServer(u); pickPublic = false
-                                    vm.message = "Nastaven veřejný server $name.\nZkuste spojení tlačítkem Vyzkoušet. Když server nebude odpovídat, vyberte jiný."
-                                }, Modifier.fillMaxWidth()) {
-                                    Column(Modifier.fillMaxWidth()) {
-                                        Text(name, fontWeight = FontWeight.SemiBold)
-                                        Text(u.removePrefix("ssl://"), fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                        Text(u.removePrefix("ssl://"), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                                     }
+                                    TextButton(onClick = { pickPublic = false; vm.testServer(u) }) { Text("Vyzkoušet") }
+                                    TextButton(onClick = {
+                                        url = u; vm.setServer(u); pickPublic = false
+                                        vm.message = "Peněženka teď používá veřejný server $name.\nNa svůj uzel se vrátíte zadáním jeho adresy a Uložit."
+                                    }) { Text("Použít") }
                                 }
                             }
                         }

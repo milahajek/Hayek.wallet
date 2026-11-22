@@ -63,13 +63,31 @@ fun verifyServerCert(host: String, port: Int, store: PinStore): String {
     return fp
 }
 
+/**
+ * Očistí adresu serveru od neviditelných znaků a mezer, které umí vložit klávesnice,
+ * sjednotí různé druhy dvojteček a malá písmena ve schématu.
+ */
+fun normalizeServerUrl(input: String): String {
+    val cleaned = input
+        .replace('：', ':').replace('꞉', ':').replace('∶', ':').replace('﹕', ':')
+        .filter { c -> !c.isWhitespace() && Character.getType(c) != Character.FORMAT.toInt() && c != '\uFEFF' }
+    val lower = cleaned.lowercase()
+    return when {
+        lower.startsWith("ssl://") -> "ssl://" + cleaned.substring(6)
+        lower.startsWith("tcp://") -> "tcp://" + cleaned.substring(6)
+        else -> cleaned
+    }
+}
+
 /** Rozloží „ssl://host:port“ / „tcp://host:port“. */
 data class ServerAddr(val ssl: Boolean, val host: String, val port: Int) {
     val hostPort get() = "$host:$port"
 
     companion object {
         fun parse(url: String): ServerAddr {
-            val u = url.trim()
+            val u = normalizeServerUrl(url)
+            if (u.count { it == ':' } > 2 || u.indexOf("://", 6) >= 0)
+                throw IllegalArgumentException("Adresa obsahuje víc adres najednou – smažte pole (✕) a zadejte jednu")
             val ssl = when {
                 u.startsWith("ssl://") -> true
                 u.startsWith("tcp://") -> false
@@ -77,8 +95,12 @@ data class ServerAddr(val ssl: Boolean, val host: String, val port: Int) {
             }
             val rest = u.substringAfter("://").trimEnd('/')
             val host = rest.substringBeforeLast(":")
-            val port = rest.substringAfterLast(":").toIntOrNull()
-                ?: throw IllegalArgumentException("V adrese chybí číslo portu (např. :50002)")
+            val portText = rest.substringAfterLast(":", "")
+            val port = portText.toIntOrNull()
+                ?: throw IllegalArgumentException(
+                    if (!rest.contains(':')) "V adrese chybí dvojtečka a číslo portu (např. :50002)"
+                    else "Za poslední dvojtečkou musí být jen číslo portu, je tam „$portText“"
+                )
             require(host.isNotBlank()) { "V adrese chybí IP nebo název uzlu" }
             return ServerAddr(ssl, host, port)
         }

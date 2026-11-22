@@ -282,7 +282,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- Nastavení ----------
 
     fun setServer(url: String) {
-        serverUrl = url.trim()
+        serverUrl = normalizeServerUrl(url)
         prefs.edit().putString("server", serverUrl).apply()
         core?.serverUrl = serverUrl
     }
@@ -290,9 +290,9 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun testServer(url: String) = run {
         message = withContext(Dispatchers.IO) {
             try {
-                io.github.milahajek.hayek.testServer(url.trim(), pins).also { pinVersion++ }
+                io.github.milahajek.hayek.testServer(normalizeServerUrl(url), pins).also { pinVersion++ }
             } catch (e: Exception) {
-                friendly(e) + "\n\n— Podrobná diagnostika —\n" + diagnoseConnection(url.trim(), pins)
+                friendly(e) + "\n\n— Podrobná diagnostika —\n" + diagnoseConnection(normalizeServerUrl(url), pins)
             }
         }
     }
