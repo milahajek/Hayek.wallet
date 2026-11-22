@@ -160,15 +160,10 @@ object Seed {
 fun connect(url: String, pins: PinStore): ElectrumClient {
     if (url.isBlank()) throw IllegalStateException(NO_SERVER)
     val addr = ServerAddr.parse(url)
-    val proxy = if (addr.ssl) PinnedTlsProxy.forServer(addr.host, addr.port, pins) else null
-    val target = if (proxy != null) "tcp://127.0.0.1:${proxy.localPort}" else "tcp://${addr.hostPort}"
-    proxy?.lastMismatch = null
-    val client = try {
-        ElectrumClient(target, null, 20.toUByte(), 2.toUByte(), false).also { it.serverFeatures() }
-    } catch (e: Exception) {
-        proxy?.lastMismatch?.let { throw it }
-        throw e
-    }
+    // U šifrovaného spojení nejdřív ověříme certifikát uzlu proti uloženému otisku.
+    if (addr.ssl) verifyServerCert(addr.host, addr.port, pins)
+    // Domácí uzel má certifikát podepsaný sám sebou – ten jsme právě ověřili otiskem.
+    val client = ElectrumClient(url.trim(), null, 20.toUByte(), 2.toUByte(), false)
     val genesis = client.serverFeatures().genesisHash.toString()
     check(genesis == MAINNET_GENESIS) { "Server není Bitcoin mainnet – odmítám se připojit." }
     return client

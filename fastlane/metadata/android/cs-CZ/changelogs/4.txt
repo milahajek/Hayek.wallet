@@ -1,0 +1,1 @@
+Oprava: spojení s uzlem přes ssl:// po aktualizaci s kontrolou certifikátu.

@@ -1,15 +1,10 @@
 package io.github.milahajek.hayek
 
-import java.io.InputStream
-import java.io.OutputStream
-import java.net.InetAddress
 import java.net.InetSocketAddress
-import java.net.ServerSocket
 import java.net.Socket
 import java.security.MessageDigest
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
-import java.util.concurrent.ConcurrentHashMap
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.X509TrustManager
@@ -22,9 +17,8 @@ import javax.net.ssl.X509TrustManager
  * certifikátu a příště přijmeme jen ten. Kdyby se někdo v síti vydával za váš uzel, otisk nebude
  * sedět a spojení se odmítne.
  *
- * BDK neumí certifikát připnout sama, proto mezi ni a uzel vkládáme malou místní TLS proxy:
- * BDK mluví nešifrovaně s 127.0.0.1 (uvnitř telefonu) a proxy vede šifrované spojení k uzlu
- * s naší kontrolou certifikátu.
+ * BDK neumí certifikát připnout sama, proto před každým připojením certifikát uzlu nejdřív
+ * zkontrolujeme vlastním krátkým TLS spojením. Když nesedí, BDK se k uzlu vůbec nepřipojí.
  */
 interface PinStore {
     fun get(hostPort: String): String?
@@ -37,95 +31,36 @@ class CertMismatchException(val hostPort: String, val expected: String, val actu
 fun sha256Fingerprint(cert: X509Certificate): String =
     MessageDigest.getInstance("SHA-256").digest(cert.encoded).joinToString(":") { "%02X".format(it) }
 
-/** Kontrolor certifikátu: první otisk uloží, další musí sedět. */
-private class PinningTrustManager(
-    private val hostPort: String,
-    private val store: PinStore,
-    private val onMismatch: (CertMismatchException) -> Unit,
-    private val onNewPin: (String) -> Unit,
-) : X509TrustManager {
-    override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) =
-        throw CertificateException("not a server")
-
-    override fun checkServerTrusted(chain: Array<out X509Certificate>, authType: String?) {
-        if (chain.isEmpty()) throw CertificateException("Server neposlal certifikát")
-        val fp = sha256Fingerprint(chain[0])
-        val pinned = store.get(hostPort)
-        when {
-            pinned == null -> { store.set(hostPort, fp); onNewPin(fp) }
-            pinned != fp -> {
-                val e = CertMismatchException(hostPort, pinned, fp)
-                onMismatch(e)
-                throw CertificateException("CERT_MISMATCH")
-            }
-        }
-    }
-
-    override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-}
-
-/** Místní proxy: 127.0.0.1:<port>  →  TLS s připnutým certifikátem  →  uzel. */
-class PinnedTlsProxy(private val host: String, private val port: Int, private val store: PinStore) {
+/**
+ * Zjistí otisk certifikátu uzlu krátkým TLS spojením a porovná ho s uloženým.
+ * Při prvním spojení otisk uloží (TOFU), při neshodě vyhodí CertMismatchException.
+ * Volá se před každým připojením BDK k uzlu.
+ */
+fun verifyServerCert(host: String, port: Int, store: PinStore): String {
     val hostPort = "$host:$port"
-    @Volatile var lastMismatch: CertMismatchException? = null
-    @Volatile var newPin: String? = null
-
-    private val server = ServerSocket(0, 16, InetAddress.getLoopbackAddress())
-    val localPort: Int get() = server.localPort
-
-    private val ssl: SSLContext = SSLContext.getInstance("TLS").apply {
-        init(null, arrayOf(PinningTrustManager(hostPort, store, { lastMismatch = it }, { newPin = it })), null)
-    }
-
-    init {
-        Thread({
-            while (!server.isClosed) {
-                val client = try { server.accept() } catch (_: Exception) { break }
-                Thread({ handle(client) }, "pin-proxy-conn").apply { isDaemon = true }.start()
-            }
-        }, "pin-proxy").apply { isDaemon = true }.start()
-    }
-
-    private fun handle(client: Socket) {
-        val remote: SSLSocket
-        try {
-            val raw = Socket()
-            raw.connect(InetSocketAddress(host, port), 10_000)
-            remote = ssl.socketFactory.createSocket(raw, host, port, true) as SSLSocket
-            remote.startHandshake()
-        } catch (e: Exception) {
-            runCatching { client.close() }
-            return
+    var seen: String? = null
+    val capture = object : X509TrustManager {
+        override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) =
+            throw CertificateException("not a server")
+        override fun checkServerTrusted(chain: Array<out X509Certificate>, authType: String?) {
+            if (chain.isEmpty()) throw CertificateException("Server neposlal certifikát")
+            seen = sha256Fingerprint(chain[0])
         }
-        pipe(client.getInputStream(), remote.outputStream, client, remote)
-        pipe(remote.inputStream, client.getOutputStream(), client, remote)
+        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
     }
-
-    private fun pipe(input: InputStream, output: OutputStream, a: Socket, b: Socket) {
-        Thread({
-            val buf = ByteArray(16 * 1024)
-            try {
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    output.write(buf, 0, n); output.flush()
-                }
-            } catch (_: Exception) {
-            } finally {
-                runCatching { a.close() }; runCatching { b.close() }
-            }
-        }, "pin-proxy-pipe").apply { isDaemon = true }.start()
+    val ctx = SSLContext.getInstance("TLS").apply { init(null, arrayOf(capture), null) }
+    Socket().use { raw ->
+        raw.connect(InetSocketAddress(host, port), 10_000)
+        raw.soTimeout = 10_000
+        (ctx.socketFactory.createSocket(raw, host, port, false) as SSLSocket).use { it.startHandshake() }
     }
-
-    fun close() = runCatching { server.close() }
-
-    companion object {
-        private val proxies = ConcurrentHashMap<String, PinnedTlsProxy>()
-
-        /** Jedna proxy pro každý server (vytvoří se při prvním použití). */
-        fun forServer(host: String, port: Int, store: PinStore): PinnedTlsProxy =
-            proxies.getOrPut("$host:$port") { PinnedTlsProxy(host, port, store) }
+    val fp = seen ?: throw CertificateException("Certifikát se nepodařilo přečíst")
+    val pinned = store.get(hostPort)
+    when {
+        pinned == null -> store.set(hostPort, fp)
+        pinned != fp -> throw CertMismatchException(hostPort, pinned, fp)
     }
+    return fp
 }
 
 /** Rozloží „ssl://host:port“ / „tcp://host:port“. */

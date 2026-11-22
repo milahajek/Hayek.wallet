@@ -1,0 +1,1 @@
+Fix: connection to the node over ssl:// after the certificate pinning update.
