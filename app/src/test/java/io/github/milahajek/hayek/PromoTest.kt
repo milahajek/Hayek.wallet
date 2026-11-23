@@ -20,6 +20,7 @@ class PromoTest {
     private fun shoot(name: String, screen: Boolean = true, after: (WalletViewModel) -> Unit = {}, setup: (WalletViewModel) -> Unit) {
         val ctl = Robolectric.buildActivity(MainActivity::class.java).setup()
         val vm = ViewModelProvider(ctl.get())[WalletViewModel::class.java]
+        Lang.set(ctl.get(), System.getenv("PROMO_LANG") ?: "cs")
         if (vm.hideBalance) vm.toggleHideBalance()
         setup(vm); androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications(); ctl.recreate(); val act = ctl.get(); after(vm)
         repeat(10) { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200)) }

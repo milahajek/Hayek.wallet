@@ -48,7 +48,7 @@ fun verifyServerCert(host: String, port: Int, store: PinStore): String {
         override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) =
             throw CertificateException("not a server")
         override fun checkServerTrusted(chain: Array<out X509Certificate>, authType: String?) {
-            if (chain.isEmpty()) throw CertificateException("Server neposlal certifikát")
+            if (chain.isEmpty()) throw CertificateException(L("Server neposlal certifikát", "The server sent no certificate"))
             seen = sha256Fingerprint(chain[0])
         }
         override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
@@ -59,7 +59,7 @@ fun verifyServerCert(host: String, port: Int, store: PinStore): String {
         raw.soTimeout = 10_000
         (ctx.socketFactory.createSocket(raw, host, port, false) as SSLSocket).use { it.startHandshake() }
     }
-    val fp = seen ?: throw CertificateException("Certifikát se nepodařilo přečíst")
+    val fp = seen ?: throw CertificateException(L("Certifikát se nepodařilo přečíst", "Could not read the certificate"))
     val pinned = store.get(hostPort)
     when {
         pinned == null -> store.set(hostPort, fp)
@@ -92,21 +92,21 @@ data class ServerAddr(val ssl: Boolean, val host: String, val port: Int) {
         fun parse(url: String): ServerAddr {
             val u = normalizeServerUrl(url)
             if (u.count { it == ':' } > 2 || u.indexOf("://", 6) >= 0)
-                throw IllegalArgumentException("Adresa obsahuje víc adres najednou – smažte pole (✕) a zadejte jednu")
+                throw IllegalArgumentException(L("Adresa obsahuje víc adres najednou – smažte pole (✕) a zadejte jednu", "The field contains several addresses – clear it (✕) and enter one"))
             val ssl = when {
                 u.startsWith("ssl://") -> true
                 u.startsWith("tcp://") -> false
-                else -> throw IllegalArgumentException("Adresa musí začínat ssl:// nebo tcp://")
+                else -> throw IllegalArgumentException(L("Adresa musí začínat ssl:// nebo tcp://", "The address must start with ssl:// or tcp://"))
             }
             val rest = u.substringAfter("://").trimEnd('/')
             val host = rest.substringBeforeLast(":")
             val portText = rest.substringAfterLast(":", "")
             val port = portText.toIntOrNull()
                 ?: throw IllegalArgumentException(
-                    if (!rest.contains(':')) "V adrese chybí dvojtečka a číslo portu (např. :50002)"
-                    else "Za poslední dvojtečkou musí být jen číslo portu, je tam „$portText“"
+                    if (!rest.contains(':')) L("V adrese chybí dvojtečka a číslo portu (např. :50002)", "The address is missing a colon and port number (e.g. :50002)")
+                    else L("Za poslední dvojtečkou musí být jen číslo portu, je tam „$portText“", "Only a port number may follow the last colon, found „$portText“")
                 )
-            require(host.isNotBlank()) { "V adrese chybí IP nebo název uzlu" }
+            require(host.isNotBlank()) { L("V adrese chybí IP nebo název uzlu", "The address is missing the node's IP or name") }
             return ServerAddr(ssl, host, port)
         }
     }
@@ -130,9 +130,9 @@ fun diagnoseConnection(url: String, pins: PinStore): String {
             out.append('\n')
         }
     }
-    val addr = try { ServerAddr.parse(url) } catch (e: Exception) { return "✘ Adresa: ${e.message}" }
-    out.append("Diagnostika ${addr.hostPort} (${if (addr.ssl) "ssl" else "tcp"})\n")
-    step("1 TCP spojení") {
+    val addr = try { ServerAddr.parse(url) } catch (e: Exception) { return L("✘ Adresa: ${e.message}", "✘ Address: ${e.message}") }
+    out.append(L("Diagnostika ${addr.hostPort} (${if (addr.ssl) "ssl" else "tcp"})\n", "Diagnostics ${addr.hostPort} (${if (addr.ssl) "ssl" else "tcp"})\n"))
+    step(L("1 TCP spojení", "1 TCP connection")) {
         Socket().use { it.connect(InetSocketAddress(addr.host, addr.port), 8000) }; ""
     }
     if (addr.ssl) {
@@ -150,35 +150,35 @@ fun diagnoseConnection(url: String, pins: PinStore): String {
                     val sess = s.session
                     s.outputStream.write("{\"id\":1,\"method\":\"server.version\",\"params\":[\"diag\",\"1.4\"]}\n".toByteArray())
                     s.outputStream.flush()
-                    val line = s.inputStream.bufferedReader().readLine() ?: "(žádná odpověď)"
-                    "${sess.protocol} ${sess.cipherSuite}\n   odpověď: ${line.take(80)}"
+                    val line = s.inputStream.bufferedReader().readLine() ?: L("(žádná odpověď)", "(no response)")
+                    L("${sess.protocol} ${sess.cipherSuite}\n   odpověď: ${line.take(80)}", "${sess.protocol} ${sess.cipherSuite}\n   response: ${line.take(80)}")
                 }
             }
         }
-        step("3 Otisk certifikátu") {
+        step(L("3 Otisk certifikátu", "3 Certificate fingerprint")) {
             val fp = verifyServerCert(addr.host, addr.port, object : PinStore {
                 override fun get(hostPort: String) = pins.get(hostPort)
                 override fun set(hostPort: String, fingerprint: String) {}
             })
             val p = pins.get(addr.hostPort)
-            "${fp.take(23)}… " + when (p) { null -> "(zatím neuložen)"; fp -> "(sedí s uloženým)"; else -> "(NESEDÍ s uloženým ${p.take(11)}…)" }
+            "${fp.take(23)}… " + when (p) { null -> L("(zatím neuložen)", "(not saved yet)"); fp -> L("(sedí s uloženým)", "(matches the saved one)"); else -> L("(NESEDÍ s uloženým ${p.take(11)}…)", "(DOES NOT match the saved ${p.take(11)}…)") }
         }
     }
-    step("4 BDK přímo") {
+    step(L("4 BDK přímo", "4 BDK directly")) {
         val c = org.bitcoindevkit.ElectrumClient(url.trim(), null, 15.toUByte(), 0.toUByte(), false)
         val f = c.serverFeatures()
-        "${f.serverVersion}, blok ${c.blockHeadersSubscribe().height}"
+        L("${f.serverVersion}, blok ${c.blockHeadersSubscribe().height}", "${f.serverVersion}, block ${c.blockHeadersSubscribe().height}")
     }
-    step("5 BDK podruhé") {
+    step(L("5 BDK podruhé", "5 BDK second attempt")) {
         val c = org.bitcoindevkit.ElectrumClient(url.trim(), null, 15.toUByte(), 0.toUByte(), false)
         c.serverFeatures().serverVersion
     }
-    if (addr.ssl && !isPublicServer(url)) step("6 Ověřené spojení (přeposílač s kontrolou certifikátu)") {
+    if (addr.ssl && !isPublicServer(url)) step(L("6 Ověřené spojení (přeposílač s kontrolou certifikátu)", "6 Verified connection (relay with certificate check)")) {
         val c = connect(url, pins)
-        "${c.serverFeatures().serverVersion}, blok ${c.blockHeadersSubscribe().height}"
+        L("${c.serverFeatures().serverVersion}, blok ${c.blockHeadersSubscribe().height}", "${c.serverFeatures().serverVersion}, block ${c.blockHeadersSubscribe().height}")
     }
     if (!addr.ssl && out.contains("✘ 4") && out.contains("unexpected EOF"))
-        out.append("\n→ Port nejspíš čeká šifrované spojení. Zkuste ssl://${addr.hostPort}")
+        out.append(L("\n→ Port nejspíš čeká šifrované spojení. Zkuste ssl://${addr.hostPort}", "\n→ The port probably expects an encrypted connection. Try ssl://${addr.hostPort}"))
     return out.toString().trimEnd()
 }
 
@@ -211,13 +211,13 @@ class PinnedRelay private constructor(private val host: String, private val port
         val tm = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = throw CertificateException("not a server")
             override fun checkServerTrusted(chain: Array<out X509Certificate>, authType: String?) {
-                if (chain.isEmpty()) throw CertificateException("Server neposlal certifikát")
+                if (chain.isEmpty()) throw CertificateException(L("Server neposlal certifikát", "The server sent no certificate"))
                 val fp = sha256Fingerprint(chain[0])
                 // Relay se spouští až po verifyServerCert, otisk tedy už musí být uložený. Bez něj nic nepustíme.
-                val pinned = store.get(hostPort) ?: throw CertificateException("Certifikát uzlu není připnutý")
+                val pinned = store.get(hostPort) ?: throw CertificateException(L("Certifikát uzlu není připnutý", "The node certificate is not pinned"))
                 if (!pinned.equals(fp, ignoreCase = true)) {
                     lastMismatch = CertMismatchException(hostPort, pinned, fp)
-                    throw CertificateException("Certifikát uzlu nesouhlasí s připnutým otiskem")
+                    throw CertificateException(L("Certifikát uzlu nesouhlasí s připnutým otiskem", "The node certificate does not match the pinned fingerprint"))
                 }
             }
             override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()

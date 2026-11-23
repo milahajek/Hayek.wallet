@@ -1,0 +1,1 @@
+Payment requests with amount and description in the QR code, address book, incoming payment notifications even when the app is closed, English version (language in Settings) and subtle animations: success celebration with haptics, smooth screen transitions, pulse for pending payments.

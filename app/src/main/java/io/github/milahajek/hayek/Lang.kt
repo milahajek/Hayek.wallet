@@ -36,3 +36,8 @@ object Lang {
 
 /** Text v aktuálním jazyce. */
 fun L(cs: String, en: String): String = if (Lang.english) en else cs
+
+/** Datum (a čas) podle jazyka: „23. 11. 2026 14:05“ / „Nov 23, 2026 2:05 PM“. */
+fun fmtDate(millis: Long, time: Boolean = false): String =
+    if (Lang.english) java.text.SimpleDateFormat(if (time) "MMM d, yyyy h:mm a" else "MMM d, yyyy", Locale.US).format(java.util.Date(millis))
+    else java.text.SimpleDateFormat(if (time) "d. M. yyyy HH:mm" else "d. M. yyyy", Locale.forLanguageTag("cs")).format(java.util.Date(millis))

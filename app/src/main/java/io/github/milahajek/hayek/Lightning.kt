@@ -54,28 +54,28 @@ fun parseLndConnect(raw: String, fallbackHost: String? = null): LndConfig {
         val params = rest.substringAfter("?", "").split("&").associate {
             it.substringBefore("=").lowercase() to java.net.URLDecoder.decode(it.substringAfter("=", ""), "UTF-8")
         }
-        val mac = params["macaroon"] ?: throw IllegalArgumentException("V QR kódu chybí přístupový klíč (macaroon).")
+        val mac = params["macaroon"] ?: throw IllegalArgumentException(L("V QR kódu chybí přístupový klíč (macaroon).", "The QR code is missing the access key (macaroon)."))
         val fp = params["certfp"]?.trim()?.uppercase()?.takeIf { it.matches(Regex("([0-9A-F]{2}:){31}[0-9A-F]{2}")) }
             ?: params["cert"]?.takeIf { it.isNotBlank() }?.let { certFingerprintFromBase64(it) }
         return LndConfig(normalizeLndHost(hostPort), macaroonToHex(mac), fp)
     }
     val host = fallbackHost?.takeIf { it.isNotBlank() }
-        ?: throw IllegalArgumentException("Zadejte adresu uzlu (např. 192.168.1.10:8080), nebo naskenujte QR kód lndconnect.")
+        ?: throw IllegalArgumentException(L("Zadejte adresu uzlu (např. 192.168.1.10:8080), nebo naskenujte QR kód lndconnect.", "Enter the node address (e.g. 192.168.1.10:8080), or scan an lndconnect QR code."))
     return LndConfig(normalizeLndHost(host), macaroonToHex(text))
 }
 
 fun normalizeLndHost(input: String): String {
     val s = input.trim().removePrefix("https://").removePrefix("http://").trimEnd('/')
-    if (s.isEmpty()) throw IllegalArgumentException("Chybí adresa uzlu.")
-    if (s.contains(".onion")) throw IllegalArgumentException("Adresy přes Tor (.onion) zatím nepodporuji. Použijte IP adresu uzlu v domácí síti, např. 192.168.1.10:8080.")
+    if (s.isEmpty()) throw IllegalArgumentException(L("Chybí adresa uzlu.", "The node address is missing."))
+    if (s.contains(".onion")) throw IllegalArgumentException(L("Adresy přes Tor (.onion) zatím nepodporuji. Použijte IP adresu uzlu v domácí síti, např. 192.168.1.10:8080.", "Tor addresses (.onion) aren't supported yet. Use the node's IP address in your home network, e.g. 192.168.1.10:8080."))
     val hasPort = s.substringAfterLast(":", "").toIntOrNull() != null && !s.endsWith("]")
     val hp = if (hasPort) s else "$s:8080"
     val host = hp.substringBeforeLast(":")
-    val port = hp.substringAfterLast(":").toIntOrNull() ?: throw IllegalArgumentException("Neplatný port.")
+    val port = hp.substringAfterLast(":").toIntOrNull() ?: throw IllegalArgumentException(L("Neplatný port.", "Invalid port."))
     // Jen IP adresa nebo běžné jméno – žádné „@“, lomítka, uvozovky ani znaky pro příkazovou řádku.
     val okHost = host.matches(Regex("[A-Za-z0-9]([A-Za-z0-9.-]{0,250}[A-Za-z0-9])?")) || host.matches(Regex("\\[[0-9A-Fa-f:.]+]"))
-    if (!okHost) throw IllegalArgumentException("Neplatná adresa uzlu: $host")
-    if (port !in 1..65535) throw IllegalArgumentException("Neplatný port.")
+    if (!okHost) throw IllegalArgumentException(L("Neplatná adresa uzlu: $host", "Invalid node address: $host"))
+    if (port !in 1..65535) throw IllegalArgumentException(L("Neplatný port.", "Invalid port."))
     return "$host:$port"
 }
 
@@ -87,14 +87,14 @@ fun certFingerprintFromBase64(b64: String): String? = runCatching {
 
 fun macaroonToHex(mac: String): String {
     val m = mac.trim().replace("\\s".toRegex(), "")
-    if (m.isEmpty()) throw IllegalArgumentException("Chybí přístupový klíč (macaroon).")
+    if (m.isEmpty()) throw IllegalArgumentException(L("Chybí přístupový klíč (macaroon).", "The access key (macaroon) is missing."))
     val hex = if (m.length % 2 == 0 && m.all { it in "0123456789abcdefABCDEF" }) m.lowercase()
     else try {
         Base64.getUrlDecoder().decode(m.replace('+', '-').replace('/', '_').trimEnd('=')).joinToString("") { "%02x".format(it) }
     } catch (e: Exception) {
-        throw IllegalArgumentException("Přístupový klíč (macaroon) není ve správném formátu.")
+        throw IllegalArgumentException(L("Přístupový klíč (macaroon) není ve správném formátu.", "The access key (macaroon) has the wrong format."))
     }
-    if (hex.length < 100) throw IllegalArgumentException("Přístupový klíč (macaroon) je neúplný.")
+    if (hex.length < 100) throw IllegalArgumentException(L("Přístupový klíč (macaroon) je neúplný.", "The access key (macaroon) is incomplete."))
     return hex
 }
 
@@ -147,9 +147,9 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
     private val trust = object : X509TrustManager {
         override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = throw CertificateException("not a server")
         override fun checkServerTrusted(chain: Array<out X509Certificate>, authType: String?) {
-            if (chain.isEmpty()) throw CertificateException("Uzel neposlal certifikát")
+            if (chain.isEmpty()) throw CertificateException(L("Uzel neposlal certifikát", "The node sent no certificate"))
             val fp = sha256Fingerprint(chain[0])
-            val pinned = pins.get(pinKey) ?: throw CertificateException("Certifikát Lightning uzlu není ověřený")
+            val pinned = pins.get(pinKey) ?: throw CertificateException(L("Certifikát Lightning uzlu není ověřený", "The Lightning node certificate is not verified"))
             if (!pinned.equals(fp, ignoreCase = true)) throw CertificateException("PIN:" + pinned + "|" + fp)
         }
         override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
@@ -196,10 +196,10 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
         return when {
             code == 401 || code == 403 || msg.contains("permission denied") || msg.contains("verification failed") ||
                 msg.contains("macaroon", true) || msg.contains("unmarshal", true) ->
-                "Uzel odmítl přístupový klíč ($msg). Vytvořte na uzlu nový a připojte se znovu."
+                L("Uzel odmítl přístupový klíč ($msg). Vytvořte na uzlu nový a připojte se znovu.", "The node rejected the access key ($msg). Create a new one on the node and connect again.")
             msg.contains("wallet locked", true) || msg.contains("not yet ready", true) || msg.contains("unlock", true) ->
-                "LND na uzlu je zamčené. Odemkněte ho na RaspiBlitzu (menu → LND → UNLOCK, heslo C)."
-            else -> msg.ifBlank { "Chyba LND (HTTP $code)" }
+                L("LND na uzlu je zamčené. Odemkněte ho na RaspiBlitzu (menu → LND → UNLOCK, heslo C).", "LND on the node is locked. Unlock it on RaspiBlitz (menu → LND → UNLOCK, password C).")
+            else -> msg.ifBlank { L("Chyba LND (HTTP $code)", "LND error (HTTP $code)") }
         }
     }
 
@@ -233,7 +233,7 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
     fun channelBackup(): ByteArray {
         val j = JSONObject(request("GET", "/v1/channels/backup"))
         val b64 = j.optJSONObject("multi_chan_backup")?.optString("multi_chan_backup").orEmpty()
-        require(b64.isNotBlank()) { "Uzel neposlal zálohu kanálů." }
+        require(b64.isNotBlank()) { L("Uzel neposlal zálohu kanálů.", "The node sent no channel backup.") }
         return java.util.Base64.getDecoder().decode(b64)
     }
 
@@ -311,7 +311,7 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
             request("POST", "/v2/router/send", body, timeoutMs = 90_000)
         } catch (e: LndException) {
             // Odmítnutí před odesláním (už zaplaceno, vlastní faktura, vypršelo…) přijde jako HTTP chyba.
-            if (e.message.orEmpty().startsWith("Uzel odmítl přístupový klíč") || e.message.orEmpty().startsWith("LND na uzlu je zamčené")) throw e
+            if (e.message.orEmpty().startsWith(L("Uzel odmítl přístupový klíč", "The node rejected the access key")) || e.message.orEmpty().startsWith(L("LND na uzlu je zamčené", "LND on the node is locked"))) throw e
             return LnPayResult(false, 0, null, translateFailure(e.message.orEmpty()))
         }
         return parsePayStream(text)
@@ -357,7 +357,7 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
             val capture = object : X509TrustManager {
                 override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = throw CertificateException("not a server")
                 override fun checkServerTrusted(chain: Array<out X509Certificate>, authType: String?) {
-                    if (chain.isEmpty()) throw CertificateException("Uzel neposlal certifikát")
+                    if (chain.isEmpty()) throw CertificateException(L("Uzel neposlal certifikát", "The node sent no certificate"))
                     seen = sha256Fingerprint(chain[0])
                 }
                 override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
@@ -370,7 +370,7 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
                 raw.soTimeout = 10_000
                 (ctx.socketFactory.createSocket(raw, host, port, false) as javax.net.ssl.SSLSocket).use { it.startHandshake() }
             }
-            return seen ?: throw IOException("Certifikát uzlu se nepodařilo přečíst")
+            return seen ?: throw IOException(L("Certifikát uzlu se nepodařilo přečíst", "Could not read the node certificate"))
         }
 
         /** Jména uzlů se mění zřídka – pamatujeme si je po dobu běhu aplikace. */
@@ -394,7 +394,7 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
         /** Výsledek /v2/router/send – po řádcích JSON, poslední obsahuje konečný stav. */
         fun parsePayStream(text: String): LnPayResult {
             val lines = text.lines().map { it.trim() }.filter { it.startsWith("{") }
-            if (lines.isEmpty()) throw IOException("Uzel nevrátil výsledek platby.")
+            if (lines.isEmpty()) throw IOException(L("Uzel nevrátil výsledek platby.", "The node returned no payment result."))
             val last = JSONObject(lines.last())
             last.optJSONObject("error")?.let { e ->
                 val m = e.optString("message")
@@ -404,19 +404,19 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
             return when (r.optString("status")) {
                 "SUCCEEDED" -> LnPayResult(true, r.optString("fee_sat").toLongOrNull() ?: 0, r.optString("payment_preimage"), null)
                 "FAILED" -> LnPayResult(false, 0, null, translateFailure(r.optString("failure_reason")))
-                else -> LnPayResult(false, 0, null, "Platba zatím není dokončená (stav ${r.optString("status")}). Zkontrolujte ji za chvíli v historii.")
+                else -> LnPayResult(false, 0, null, L("Platba zatím není dokončená (stav ${r.optString("status")}). Zkontrolujte ji za chvíli v historii.", "The payment isn't finished yet (status ${r.optString("status")}). Check it in the history in a moment."))
             }
         }
 
         fun translateFailure(reason: String): String = when {
-            reason.contains("NO_ROUTE") -> "Nenašla se cesta k příjemci. Zkuste to za chvíli znovu, nebo zvyšte limit poplatku."
-            reason.contains("INSUFFICIENT_BALANCE") -> "Na kanálu není dost prostředků (včetně poplatku)."
-            reason.contains("TIMEOUT") -> "Platba nestihla doběhnout. Peníze neodešly, zkuste to znovu."
-            reason.contains("INCORRECT_PAYMENT_DETAILS") -> "Příjemce platbu odmítl (faktura už je zaplacená, vypršela nebo nesedí částka)."
-            reason.contains("already paid", true) || reason.contains("ALREADY_PAID", true) -> "Tahle faktura už je zaplacená."
-            reason.contains("self-payments", true) -> "Nelze platit fakturu vlastního uzlu."
-            reason.contains("invoice expired", true) -> "Faktura vypršela. Požádejte příjemce o novou."
-            else -> "Platba se nezdařila: $reason"
+            reason.contains("NO_ROUTE") -> L("Nenašla se cesta k příjemci. Zkuste to za chvíli znovu, nebo zvyšte limit poplatku.", "No route to the recipient found. Try again in a moment, or raise the fee limit.")
+            reason.contains("INSUFFICIENT_BALANCE") -> L("Na kanálu není dost prostředků (včetně poplatku).", "Not enough funds in the channel (including the fee).")
+            reason.contains("TIMEOUT") -> L("Platba nestihla doběhnout. Peníze neodešly, zkuste to znovu.", "The payment timed out. No money was sent, try again.")
+            reason.contains("INCORRECT_PAYMENT_DETAILS") -> L("Příjemce platbu odmítl (faktura už je zaplacená, vypršela nebo nesedí částka).", "The recipient rejected the payment (invoice already paid, expired or the amount doesn't match).")
+            reason.contains("already paid", true) || reason.contains("ALREADY_PAID", true) -> L("Tahle faktura už je zaplacená.", "This invoice is already paid.")
+            reason.contains("self-payments", true) -> L("Nelze platit fakturu vlastního uzlu.", "You can't pay your own node's invoice.")
+            reason.contains("invoice expired", true) -> L("Faktura vypršela. Požádejte příjemce o novou.", "The invoice has expired. Ask the recipient for a new one.")
+            else -> L("Platba se nezdařila: $reason", "The payment failed: $reason")
         }
     }
 }

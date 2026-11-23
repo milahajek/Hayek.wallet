@@ -1,0 +1,1 @@
+Žádost o platbu s částkou a popisem v QR kódu, adresář kontaktů, upozornění na příchozí platby i při zavřené aplikaci, anglická verze (volba jazyka v Nastavení) a decentní animace: oslava úspěšné platby s vibrací, plynulé přechody obrazovek, pulz u čekající platby.

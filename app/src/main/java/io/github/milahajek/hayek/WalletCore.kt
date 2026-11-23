@@ -72,8 +72,12 @@ data class FeeEstimates(val fast: Long, val normal: Long, val slow: Long) {
     fun rate(choice: FeeChoice) = when (choice) { FeeChoice.FAST -> fast; FeeChoice.NORMAL -> normal; FeeChoice.SLOW -> slow; FeeChoice.CUSTOM -> null }
 }
 
-enum class FeeChoice(val title: String, val eta: String) {
-    FAST("Rychle", "~20 min"), NORMAL("Normálně", "~1 hodina"), SLOW("Levně", "~1 den"), CUSTOM("Vlastní", "")
+enum class FeeChoice(private val t: Pair<String, String>, private val e: Pair<String, String>) {
+    FAST("Rychle" to "Fast", "~20 min" to "~20 min"), NORMAL("Normálně" to "Normal", "~1 hodina" to "~1 hour"),
+    SLOW("Levně" to "Cheap", "~1 den" to "~1 day"), CUSTOM("Vlastní" to "Custom", "" to "");
+
+    val title: String get() = L(t.first, t.second)
+    val eta: String get() = L(e.first, e.second)
 }
 
 /** Velikost běžné platby (1 vstup, 2 výstupy, SegWit) ve vB – pro orientační odhad poplatku. */
@@ -123,7 +127,7 @@ object WatchOnly {
         var n = java.math.BigInteger.ZERO
         for (c in s) {
             val i = ALPHABET.indexOf(c)
-            require(i >= 0) { "Neplatný znak v klíči" }
+            require(i >= 0) { L("Neplatný znak v klíči", "Invalid character in the key") }
             n = n.multiply(java.math.BigInteger.valueOf(58)).add(java.math.BigInteger.valueOf(i.toLong()))
         }
         val raw = n.toByteArray().let { if (it.size > 1 && it[0] == 0.toByte()) it.copyOfRange(1, it.size) else it }
@@ -131,7 +135,7 @@ object WatchOnly {
         val full = ByteArray(zeros) + raw
         val data = full.copyOfRange(0, full.size - 4)
         val check = sha256(sha256(data)).copyOfRange(0, 4)
-        require(check.contentEquals(full.copyOfRange(full.size - 4, full.size))) { "Klíč má chybný kontrolní součet – je opsaný správně?" }
+        require(check.contentEquals(full.copyOfRange(full.size - 4, full.size))) { L("Klíč má chybný kontrolní součet – je opsaný správně?", "The key has a wrong checksum – is it copied correctly?") }
         return data
     }
 
@@ -151,14 +155,14 @@ object WatchOnly {
     /** zpub/ypub → xpub (jen přepis hlavičky, klíč se nemění). */
     fun toXpub(key: String): String {
         val d = b58decode(key)
-        require(d.size == 78) { "Neplatný rozšířený veřejný klíč" }
+        require(d.size == 78) { L("Neplatný rozšířený veřejný klíč", "Invalid extended public key") }
         val xpubVersion = byteArrayOf(0x04, 0x88.toByte(), 0xB2.toByte(), 0x1E)
         return b58encode(xpubVersion + d.copyOfRange(4, 78))
     }
 
     /** Deskriptor nesmí obsahovat žádný soukromý klíč (ani WIF uvnitř multisigu). */
     fun requirePublic(d: Descriptor) {
-        require(d.toStringWithSecret() == d.toString()) { "Deskriptor obsahuje SOUKROMÝ klíč. Pro sledování použijte jen veřejné klíče." }
+        require(d.toStringWithSecret() == d.toString()) { L("Deskriptor obsahuje SOUKROMÝ klíč. Pro sledování použijte jen veřejné klíče.", "The descriptor contains a PRIVATE key. For watching use only public keys.") }
     }
 
     /** Ověří vstup ještě před uložením (aby se soukromý klíč nikdy neuložil). */
@@ -169,8 +173,8 @@ object WatchOnly {
 
     fun descriptors(input: String): Pair<String, String> {
         val t = input.trim().replace(Regex("\\s+"), "")
-        require(!t.contains("prv")) { "Toto je SOUKROMÝ klíč. Pro sledování použijte veřejný klíč (zpub/xpub)." }
-        require(!Regex("(^|[^a-z])[tuv]pub").containsMatchIn(t)) { "Toto je klíč pro testnet, peněženka je pro mainnet." }
+        require(!t.contains("prv")) { L("Toto je SOUKROMÝ klíč. Pro sledování použijte veřejný klíč (zpub/xpub).", "This is a PRIVATE key. For watching use a public key (zpub/xpub).") }
+        require(!Regex("(^|[^a-z])[tuv]pub").containsMatchIn(t)) { L("Toto je klíč pro testnet, peněženka je pro mainnet.", "This is a testnet key, the wallet is for mainnet.") }
         return when {
             t.startsWith("zpub") || t.startsWith("xpub") -> {
                 val x = toXpub(t); "wpkh($x/0/*)" to "wpkh($x/1/*)"
@@ -183,10 +187,10 @@ object WatchOnly {
                 when {
                     d.contains("<0;1>") -> d.replace("<0;1>", "0") to d.replace("<0;1>", "1")
                     d.contains("/0/*") -> d to d.replace("/0/*", "/1/*")
-                    else -> throw IllegalArgumentException("Deskriptor musí obsahovat /0/* nebo <0;1>")
+                    else -> throw IllegalArgumentException(L("Deskriptor musí obsahovat /0/* nebo <0;1>", "The descriptor must contain /0/* or <0;1>"))
                 }
             }
-            else -> throw IllegalArgumentException("Vložte zpub, ypub, xpub nebo deskriptor (wpkh(...), tr(...))")
+            else -> throw IllegalArgumentException(L("Vložte zpub, ypub, xpub nebo deskriptor (wpkh(...), tr(...))", "Paste a zpub, ypub, xpub or a descriptor (wpkh(...), tr(...))"))
         }
     }
 }
@@ -198,8 +202,8 @@ object Seed {
      * Dá se tedy nezávisle ověřit na jiném zařízení.
      */
     fun fromDice(rolls: String): String {
-        require(rolls.all { it in '1'..'6' }) { "Hody smí obsahovat jen čísla 1–6" }
-        require(rolls.length >= MIN_ROLLS) { "Potřeba alespoň $MIN_ROLLS hodů" }
+        require(rolls.all { it in '1'..'6' }) { L("Hody smí obsahovat jen čísla 1–6", "Rolls may only contain the numbers 1–6") }
+        require(rolls.length >= MIN_ROLLS) { L("Potřeba alespoň $MIN_ROLLS hodů", "At least $MIN_ROLLS rolls are needed") }
         val entropy = MessageDigest.getInstance("SHA-256").digest(rolls.toByteArray(Charsets.US_ASCII))
         return Mnemonic.fromEntropy(entropy).toString()
     }
@@ -236,7 +240,7 @@ fun connect(url: String, pins: PinStore): ElectrumClient {
         ElectrumClient(normalizeServerUrl(url), null, 20.toUByte(), 2.toUByte(), public)
     }
     val genesis = client.serverFeatures().genesisHash.toString()
-    check(genesis == MAINNET_GENESIS) { "Server není Bitcoin mainnet – odmítám se připojit." }
+    check(genesis == MAINNET_GENESIS) { L("Server není Bitcoin mainnet – odmítám se připojit.", "The server is not Bitcoin mainnet – refusing to connect.") }
     return client
 }
 
@@ -247,11 +251,11 @@ fun testServer(url: String, pins: PinStore): String {
     val ver = c.serverFeatures().serverVersion
     val addr = ServerAddr.parse(url)
     val sec = when {
-        isPublicServer(url) -> "Šifrováno, certifikát ověřen certifikační autoritou.\n⚠ Veřejný server vidí vaše adresy, zůstatek a IP adresu."
-        addr.ssl -> "Šifrováno, certifikát ověřen:\n${pins.get(addr.hostPort)?.take(23)}…"
-        else -> "⚠ Nešifrované spojení (tcp). Doporučujeme ssl://."
+        isPublicServer(url) -> L("Šifrováno, certifikát ověřen certifikační autoritou.\n⚠ Veřejný server vidí vaše adresy, zůstatek a IP adresu.", "Encrypted, certificate verified by a certificate authority.\n⚠ A public server sees your addresses, balance and IP address.")
+        addr.ssl -> L("Šifrováno, certifikát ověřen:\n${pins.get(addr.hostPort)?.take(23)}…", "Encrypted, certificate verified:\n${pins.get(addr.hostPort)?.take(23)}…")
+        else -> L("⚠ Nešifrované spojení (tcp). Doporučujeme ssl://.", "⚠ Unencrypted connection (tcp). We recommend ssl://.")
     }
-    return "Spojeno ✔\n$ver\nPoslední blok: $tip\n\n$sec"
+    return L("Spojeno ✔\n$ver\nPoslední blok: $tip\n\n$sec", "Connected ✔\n$ver\nLatest block: $tip\n\n$sec")
 }
 
 /**
@@ -382,17 +386,17 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
      * @param avoid mince, které automatický výběr nesmí použít (jiná skupina KYC / bez KYC).
      */
     fun prepare(to: String, amountSat: Long, feeRateSatVb: Long, sendAll: Boolean, selected: Set<String> = emptySet(), avoid: Set<String> = emptySet()): PreparedTx {
-        check(!watchOnly) { "Sledovací peněženka nemůže odesílat." }
+        check(!watchOnly) { L("Sledovací peněženka nemůže odesílat.", "A watch-only wallet can't send.") }
         val address = try {
             Address(to.trim(), NETWORK)
         } catch (e: Exception) {
-            throw IllegalArgumentException("Neplatná bitcoinová adresa")
+            throw IllegalArgumentException(L("Neplatná bitcoinová adresa", "Invalid bitcoin address"))
         }
-        require(feeRateSatVb in 1..500) { "Poplatek musí být 1–500 sat/vB" }
+        require(feeRateSatVb in 1..500) { L("Poplatek musí být 1–500 sat/vB", "The fee must be 1–500 sat/vB") }
         var builder = TxBuilder().feeRate(FeeRate.fromSatPerVb(feeRateSatVb.toULong()))
         val available = coins().filter { !it.frozen && (selected.isNotEmpty() || it.id !in avoid) }
         val chosen = if (selected.isNotEmpty()) available.filter { it.id in selected } else emptyList()
-        require(selected.isEmpty() || chosen.size == selected.size) { "Některá vybraná mince už není k dispozici nebo je zmrazená." }
+        require(selected.isEmpty() || chosen.size == selected.size) { L("Některá vybraná mince už není k dispozici nebo je zmrazená.", "A selected coin is no longer available or is frozen.") }
         if (chosen.isNotEmpty()) {
             builder = builder.addUtxos(chosen.map { OutPoint(Txid.fromString(it.txid), it.vout.toUInt()) }).manuallySelectedOnly()
         } else if (avoid.isNotEmpty()) {
@@ -400,11 +404,11 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
         }
         builder = if (sendAll) {
             val spend = chosen.ifEmpty { available }
-            require(spend.isNotEmpty()) { if (avoid.isNotEmpty()) "Ve zvolené skupině nejsou žádné mince." else "Nemáte žádné nezmrazené mince." }
+            require(spend.isNotEmpty()) { if (avoid.isNotEmpty()) L("Ve zvolené skupině nejsou žádné mince.", "There are no coins in the chosen group.") else L("Nemáte žádné nezmrazené mince.", "You have no unfrozen coins.") }
             if (chosen.isEmpty()) builder = builder.addUtxos(spend.map { OutPoint(Txid.fromString(it.txid), it.vout.toUInt()) }).manuallySelectedOnly()
             builder.drainTo(address.scriptPubkey())
         } else {
-            require(amountSat > 0) { "Zadejte částku" }
+            require(amountSat > 0) { L("Zadejte částku", "Enter an amount") }
             builder.addRecipient(address.scriptPubkey(), Amount.fromSat(amountSat.toULong()))
         }
         val psbt = builder.finish(wallet)
@@ -419,8 +423,8 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
     }
 
     fun signAndBroadcast(p: PreparedTx): String {
-        check(!watchOnly) { "Sledovací peněženka nemůže podepisovat." }
-        check(wallet.sign(p.psbt)) { "Transakci se nepodařilo podepsat" }
+        check(!watchOnly) { L("Sledovací peněženka nemůže podepisovat.", "A watch-only wallet can't sign.") }
+        check(wallet.sign(p.psbt)) { L("Transakci se nepodařilo podepsat", "Couldn't sign the transaction") }
         val tx = p.psbt.extractTx()
         return broadcastAndApply(tx)
     }
@@ -437,8 +441,8 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
             // Odpověď se mohla jen ztratit (nebo „už ji znám“): zeptáme se uzlu, jestli transakci má.
             if (!isOwnTxKnown(txid)) {
                 throw IllegalStateException(
-                    "Transakci se nepodařilo odeslat, nebo to nejde ověřit. Nic znovu neposílejte, dokud se peněženka nenačte z uzlu.\n" +
-                        "Zkontrolujte ji v Mempoolu.\nTXID: $txid\n\nDetail: ${e.message}"
+                    L("Transakci se nepodařilo odeslat, nebo to nejde ověřit. Nic znovu neposílejte, dokud se peněženka nenačte z uzlu.\n", "The transaction couldn't be sent, or it can't be verified. Don't send anything again until the wallet has reloaded from the node.\n") +
+                        L("Zkontrolujte ji v Mempoolu.\nTXID: $txid\n\nDetail: ${e.message}", "Check it in Mempool.\nTXID: $txid\n\nDetail: ${e.message}")
                 )
             }
         }
@@ -456,24 +460,24 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
      * Příjemce dostane stejnou částku, poplatek navíc se vezme z drobných (u „poslat vše“ z odesílané částky).
      */
     fun prepareBump(txid: String, feeRateSatVb: Long): PreparedBump {
-        check(!watchOnly) { "Sledovací peněženka nemůže odesílat." }
-        require(feeRateSatVb in 1..500) { "Poplatek musí být 1–500 sat/vB" }
+        check(!watchOnly) { L("Sledovací peněženka nemůže odesílat.", "A watch-only wallet can't send.") }
+        require(feeRateSatVb in 1..500) { L("Poplatek musí být 1–500 sat/vB", "The fee must be 1–500 sat/vB") }
         val id = Txid.fromString(txid)
-        val old = wallet.txDetails(id) ?: throw IllegalArgumentException("Transakce v peněžence není.")
+        val old = wallet.txDetails(id) ?: throw IllegalArgumentException(L("Transakce v peněžence není.", "The transaction is not in the wallet."))
         val psbt = try {
             BumpFeeTxBuilder(id, FeeRate.fromSatPerVb(feeRateSatVb.toULong())).finish(wallet)
         } catch (e: CreateTxException.FeeRateTooLow) {
             val req = Regex("\\d+").find(e.message.orEmpty())?.value?.toLongOrNull()
             val vb = req?.let { kotlin.math.ceil(it * 4 / 1000.0).toLong() }
-            throw IllegalArgumentException("Nový poplatek je příliš nízký." + (vb?.let { " Musí být aspoň $it sat/vB." } ?: ""))
+            throw IllegalArgumentException(L("Nový poplatek je příliš nízký.", "The new fee is too low.") + (vb?.let { L(" Musí být aspoň $it sat/vB.", " It must be at least $it sat/vB.") } ?: ""))
         } catch (e: CreateTxException.FeeTooLow) {
-            throw IllegalArgumentException("Nový poplatek je příliš nízký – zvyšte ho.")
+            throw IllegalArgumentException(L("Nový poplatek je příliš nízký – zvyšte ho.", "The new fee is too low – raise it."))
         } catch (e: CreateTxException.CoinSelection) {
-            throw IllegalArgumentException("Na vyšší poplatek nemáte v peněžence dost prostředků.")
+            throw IllegalArgumentException(L("Na vyšší poplatek nemáte v peněžence dost prostředků.", "There aren't enough funds in the wallet for a higher fee."))
         } catch (e: CreateTxException.InsufficientFunds) {
-            throw IllegalArgumentException("Na vyšší poplatek nemáte v peněžence dost prostředků.")
+            throw IllegalArgumentException(L("Na vyšší poplatek nemáte v peněžence dost prostředků.", "There aren't enough funds in the wallet for a higher fee."))
         } catch (e: CreateTxException) {
-            throw IllegalArgumentException("Transakci nelze urychlit (${e::class.simpleName}). Možná už je potvrzená – obnovte peněženku.")
+            throw IllegalArgumentException(L("Transakci nelze urychlit (${e::class.simpleName}). Možná už je potvrzená – obnovte peněženku.", "The transaction can't be sped up (${e::class.simpleName}). Maybe it's already confirmed – refresh the wallet."))
         }
         val tx = psbt.extractTxUncheckedFeeRate()
         val recipient = tx.output().filter { !wallet.isMine(it.scriptPubkey) }.sumOf { it.value.toSat().toLong() }
@@ -481,8 +485,8 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
     }
 
     fun signAndBroadcastBump(b: PreparedBump): String {
-        check(!watchOnly) { "Sledovací peněženka nemůže podepisovat." }
-        check(wallet.sign(b.psbt)) { "Transakci se nepodařilo podepsat" }
+        check(!watchOnly) { L("Sledovací peněženka nemůže podepisovat.", "A watch-only wallet can't sign.") }
+        check(wallet.sign(b.psbt)) { L("Transakci se nepodařilo podepsat", "Couldn't sign the transaction") }
         // Peněženka hned uvidí náhradu (původní transakce zmizí, nečeká se na další synchronizaci).
         return broadcastAndApply(b.psbt.extractTx())
     }

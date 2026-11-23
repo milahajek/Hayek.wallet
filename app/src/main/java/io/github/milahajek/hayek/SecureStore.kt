@@ -188,11 +188,11 @@ fun authenticate(activity: FragmentActivity, title: String, strong: Boolean, onO
     val fingerprintOnly = strong && hasStrongBiometric(activity)
     val b = BiometricPrompt.PromptInfo.Builder().setTitle(title)
     if (fingerprintOnly) {
-        b.setSubtitle("Potvrďte otiskem prstu")
+        b.setSubtitle(L("Potvrďte otiskem prstu", "Confirm with your fingerprint"))
             .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-            .setNegativeButtonText("Zrušit")
+            .setNegativeButtonText(L("Zrušit", "Cancel"))
     } else {
-        b.setSubtitle("Ověřte se otiskem prstu nebo PINem").setAllowedAuthenticators(AUTHENTICATORS)
+        b.setSubtitle(L("Ověřte se otiskem prstu nebo PINem", "Verify with fingerprint or PIN")).setAllowedAuthenticators(AUTHENTICATORS)
     }
     prompt.authenticate(b.build())
 }

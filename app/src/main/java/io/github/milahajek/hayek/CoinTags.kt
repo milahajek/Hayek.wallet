@@ -7,16 +7,18 @@ import androidx.compose.ui.graphics.Color
  * Bez KYC = koupené bez ověření totožnosti (Bisq, osobně…), KYC = z burzy s ověřením totožnosti.
  * Smícháním obou v jedné transakci by se „čisté“ mince natrvalo spojily s vaší identitou.
  */
-enum class CoinTag(val key: String, val label: String, val color: Color) {
-    NOKYC("nokyc", "Bez KYC", Color(0xFF2E9E5B)),
-    KYC("kyc", "KYC", Color(0xFFD9534F));
+enum class CoinTag(val key: String, private val cs: String, private val en: String, val color: Color) {
+    NOKYC("nokyc", "Bez KYC", "No KYC", Color(0xFF2E9E5B)),
+    KYC("kyc", "KYC", "KYC", Color(0xFFD9534F));
+
+    val label: String get() = L(cs, en)
 
     companion object {
         const val NONE = "none"
         val UNTAGGED_COLOR = Color(0xFF8A8F98)
         fun of(key: String?): CoinTag? = entries.find { it.key == key }
         fun keyOf(t: CoinTag?): String = t?.key ?: NONE
-        fun labelOf(key: String): String = of(key)?.label ?: "Neoznačené"
+        fun labelOf(key: String): String = of(key)?.label ?: L("Neoznačené", "Untagged")
         fun colorOf(key: String): Color = of(key)?.color ?: UNTAGGED_COLOR
     }
 }

@@ -95,8 +95,8 @@ fun QrScanDialog(title: String, onResult: (String) -> Unit, onDismiss: () -> Uni
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             if (granted) CameraPreview(onResult)
             else Text(
-                if (denied) "Bez povolení fotoaparátu nelze QR kód načíst. Povolte ho v Nastavení telefonu → Aplikace → Hayek Wallet → Oprávnění."
-                else "Čekám na povolení fotoaparátu…",
+                if (denied) L("Bez povolení fotoaparátu nelze QR kód načíst. Povolte ho v Nastavení telefonu → Aplikace → Hayek Wallet → Oprávnění.", "Without camera permission the QR code can't be scanned. Allow it in phone Settings → Apps → Hayek Wallet → Permissions.")
+                else L("Čekám na povolení fotoaparátu…", "Waiting for camera permission…"),
                 color = Color.White, textAlign = TextAlign.Center,
                 modifier = Modifier.align(Alignment.Center).padding(32.dp)
             )
@@ -111,12 +111,12 @@ fun QrScanDialog(title: String, onResult: (String) -> Unit, onDismiss: () -> Uni
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(title, color = Color.White, style = MaterialTheme.typography.titleMedium)
-                Text("Namiřte fotoaparát na QR kód", color = Color(0xCCFFFFFF), style = MaterialTheme.typography.bodySmall)
+                Text(L("Namiřte fotoaparát na QR kód", "Point the camera at a QR code"), color = Color(0xCCFFFFFF), style = MaterialTheme.typography.bodySmall)
             }
             FilledTonalIconButton(
                 onClick = onDismiss,
                 modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(32.dp).size(64.dp)
-            ) { Icon(Icons.Default.Close, "Zavřít") }
+            ) { Icon(Icons.Default.Close, L("Zavřít", "Close")) }
         }
     }
 }

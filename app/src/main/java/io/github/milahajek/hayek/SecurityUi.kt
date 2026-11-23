@@ -24,25 +24,25 @@ fun FingerprintCheckDialog(vm: WalletViewModel, act: FragmentActivity) {
     AlertDialog(
         onDismissRequest = { vm.fingerprintCheck = null },
         icon = { Icon(Icons.Default.Fingerprint, null) },
-        title = { Text("V telefonu se změnily otisky prstů") },
+        title = { Text(L("V telefonu se změnily otisky prstů", "The fingerprints on this phone changed")) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Od posledního použití někdo přidal nebo odebral otisk prstu. Kdo zná váš PIN, mohl by si tak přidat vlastní otisk a odesílat vaše peníze.", fontSize = 14.sp)
+                Text(L("Od posledního použití někdo přidal nebo odebral otisk prstu. Kdo zná váš PIN, mohl by si tak přidat vlastní otisk a odesílat vaše peníze.", "Since the last use someone added or removed a fingerprint. Whoever knows your PIN could add their own fingerprint this way and send your money."), fontSize = 14.sp)
                 if (words != null) {
-                    Text("Pokud jste otisk měnil vy, potvrďte to zadáním těchto slov ze své zálohy:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(L("Pokud jste otisk měnil vy, potvrďte to zadáním těchto slov ze své zálohy:", "If you changed the fingerprint yourself, confirm it by entering these words from your backup:"), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     IncognitoKeyboard {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             idx.forEach { i ->
                                 OutlinedTextField(
                                     value = answers[i] ?: "", onValueChange = { answers[i] = it.trim().lowercase(); wrong = false },
-                                    label = { Text("${i + 1}. slovo") }, singleLine = true, modifier = Modifier.fillMaxWidth()
+                                    label = { Text(L("${i + 1}. slovo", "Word ${i + 1}")) }, singleLine = true, modifier = Modifier.fillMaxWidth()
                                 )
                             }
                         }
                     }
-                    if (wrong) Text("Slova nesouhlasí.", color = MaterialTheme.colorScheme.error)
+                    if (wrong) Text(L("Slova nesouhlasí.", "The words don't match."), color = MaterialTheme.colorScheme.error)
                 } else {
-                    Text("Sledovací peněženka nemá slova. Pokud jste otisk měnil vy, potvrďte to PINem telefonu.", fontSize = 14.sp)
+                    Text(L("Sledovací peněženka nemá slova. Pokud jste otisk měnil vy, potvrďte to PINem telefonu.", "A watch-only wallet has no words. If you changed the fingerprint yourself, confirm with the phone PIN."), fontSize = 14.sp)
                 }
             }
         },
@@ -51,12 +51,12 @@ fun FingerprintCheckDialog(vm: WalletViewModel, act: FragmentActivity) {
                 if (words != null) {
                     if (!vm.confirmFingerprintCheck(idx.associateWith { answers[it] ?: "" })) wrong = true
                 } else {
-                    authenticate(act, "Potvrdit změnu otisků", strong = false, onOk = {
+                    authenticate(act, L("Potvrdit změnu otisků", "Confirm fingerprint change"), strong = false, onOk = {
                         vm.store.resetBioCanary(); val next = vm.fingerprintCheck; vm.fingerprintCheck = null; next?.invoke()
-                    }, onFail = { vm.message = "Ověření se nezdařilo: $it" })
+                    }, onFail = { vm.message = L("Ověření se nezdařilo: $it", "Verification failed: $it") })
                 }
-            }, enabled = words == null || idx.all { !answers[it].isNullOrBlank() }) { Text("Potvrdit") }
+            }, enabled = words == null || idx.all { !answers[it].isNullOrBlank() }) { Text(L("Potvrdit", "Confirm")) }
         },
-        dismissButton = { TextButton(onClick = { vm.fingerprintCheck = null }) { Text("Zrušit") } }
+        dismissButton = { TextButton(onClick = { vm.fingerprintCheck = null }) { Text(L("Zrušit", "Cancel")) } }
     )
 }

@@ -45,21 +45,21 @@ fun TxDetailDialog(tx: TxItem, vm: WalletViewModel, act: FragmentActivity) {
     Dialog(onDismissRequest = { close() }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Card(Modifier.fillMaxWidth(0.94f).padding(vertical = 24.dp)) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp)) {
-                Text(if (incoming) "Přijatá platba" else "Odeslaná platba", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (incoming) L("Přijatá platba", "Received payment") else L("Odeslaná platba", "Sent payment"), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(vm.amount(tx.deltaSat, sign = true), fontSize = 26.sp, fontWeight = FontWeight.Bold)
-                val date = tx.time?.let { SimpleDateFormat("d. M. yyyy HH:mm", Locale.forLanguageTag("cs")).format(Date(it * 1000)) }
+                val date = tx.time?.let { fmtDate(it * 1000, time = true) }
                 Text(
-                    if (tx.confirmed) "Potvrzeno v bloku ${tx.height}" + (date?.let { " · $it" } ?: "")
-                    else "Čeká na potvrzení" + (date?.let { " · odesláno $it" } ?: ""),
+                    if (tx.confirmed) L("Potvrzeno v bloku ${tx.height}", "Confirmed in block ${tx.height}") + (date?.let { " · $it" } ?: "")
+                    else L("Čeká na potvrzení", "Waiting for confirmation") + (date?.let { L(" · odesláno $it", " · sent $it") } ?: ""),
                     fontSize = 14.sp, color = if (tx.confirmed) MaterialTheme.colorScheme.onSurface else HayekOrange
                 )
-                if (tx.feeSat != null && !incoming) Text("Poplatek: ${formatSat(tx.feeSat)}" + (tx.feeRate?.let { " ($it sat/vB)" } ?: ""), fontSize = 14.sp)
+                if (tx.feeSat != null && !incoming) Text(L("Poplatek: ${formatSat(tx.feeSat)}", "Fee: ${formatSat(tx.feeSat)}") + (tx.feeRate?.let { " ($it sat/vB)" } ?: ""), fontSize = 14.sp)
                 Spacer(Modifier.height(8.dp))
                 SelectionContainer { Text(tx.txid, fontFamily = FontFamily.Monospace, fontSize = 11.sp) }
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = note, onValueChange = { note = it.take(200) },
-                    label = { Text("Poznámka (jen v tomto telefonu)") }, placeholder = { Text("např. nájem, od bráchy…") },
+                    label = { Text(L("Poznámka (jen v tomto telefonu)", "Note (only on this phone)")) }, placeholder = { Text(L("např. nájem, od bráchy…", "e.g. rent, from my brother…")) },
                     modifier = Modifier.fillMaxWidth(), maxLines = 3
                 )
 
@@ -67,18 +67,18 @@ fun TxDetailDialog(tx: TxItem, vm: WalletViewModel, act: FragmentActivity) {
                     Spacer(Modifier.height(12.dp))
                     GlassCard(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(14.dp)) {
-                            Text("Visí transakce dlouho?", fontWeight = FontWeight.SemiBold)
-                            Text("Můžete ji urychlit vyšším poplatkem. Příjemce dostane stejnou částku, původní transakce se nahradí novou.", fontSize = 13.sp)
+                            Text(L("Visí transakce dlouho?", "Transaction stuck for long?"), fontWeight = FontWeight.SemiBold)
+                            Text(L("Můžete ji urychlit vyšším poplatkem. Příjemce dostane stejnou částku, původní transakce se nahradí novou.", "You can speed it up with a higher fee. The recipient gets the same amount, the original transaction is replaced by a new one."), fontSize = 13.sp)
                             Spacer(Modifier.height(8.dp))
                             HayekButton(onClick = { bumping = true }, Modifier.fillMaxWidth()) {
-                                Icon(Icons.Default.Speed, null); Spacer(Modifier.width(6.dp)); Text("Urychlit (zvýšit poplatek)")
+                                Icon(Icons.Default.Speed, null); Spacer(Modifier.width(6.dp)); Text(L("Urychlit (zvýšit poplatek)", "Speed up (raise fee)"))
                             }
                         }
                     }
                 }
                 if (bumping && b == null) {
                     Spacer(Modifier.height(12.dp))
-                    Text("Teď zaplaceno: ${tx.feeRate ?: "?"} sat/vB. Nový poplatek musí být vyšší.", fontSize = 13.sp)
+                    Text(L("Teď zaplaceno: ${tx.feeRate ?: "?"} sat/vB. Nový poplatek musí být vyšší.", "Paid now: ${tx.feeRate ?: "?"} sat/vB. The new fee must be higher."), fontSize = 13.sp)
                     Spacer(Modifier.height(8.dp))
                     val minRate = (tx.feeRate ?: 1) + 1
                     FeePicker(
@@ -88,24 +88,24 @@ fun TxDetailDialog(tx: TxItem, vm: WalletViewModel, act: FragmentActivity) {
                         loading = vm.bumpSuggested == null
                     )
                     Spacer(Modifier.height(8.dp))
-                    HayekButton(onClick = { vm.prepareBump(rate) }, enabled = rate.isNotBlank() && !vm.busy, modifier = Modifier.fillMaxWidth()) { Text("Spočítat") }
+                    HayekButton(onClick = { vm.prepareBump(rate) }, enabled = rate.isNotBlank() && !vm.busy, modifier = Modifier.fillMaxWidth()) { Text(L("Spočítat", "Calculate")) }
                 }
                 if (b != null) {
                     Spacer(Modifier.height(12.dp))
                     GlassCard(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
                         Column(Modifier.padding(14.dp)) {
-                            Text("Zkontrolujte urychlení", fontWeight = FontWeight.Bold)
-                            Text("Příjemce dostane: ${formatSat(b.recipientSat)}")
-                            Text("Poplatek: ${formatSat(b.oldFeeSat)} → ${formatSat(b.newFeeSat)} (${b.feeRate} sat/vB)")
-                            Text("Zaplatíte navíc: ${formatSat(b.newFeeSat - b.oldFeeSat)}", fontWeight = FontWeight.SemiBold)
+                            Text(L("Zkontrolujte urychlení", "Review the speed-up"), fontWeight = FontWeight.Bold)
+                            Text(L("Příjemce dostane: ${formatSat(b.recipientSat)}", "Recipient gets: ${formatSat(b.recipientSat)}"))
+                            Text(L("Poplatek: ${formatSat(b.oldFeeSat)} → ${formatSat(b.newFeeSat)} (${b.feeRate} sat/vB)", "Fee: ${formatSat(b.oldFeeSat)} → ${formatSat(b.newFeeSat)} (${b.feeRate} sat/vB)"))
+                            Text(L("Zaplatíte navíc: ${formatSat(b.newFeeSat - b.oldFeeSat)}", "You pay extra: ${formatSat(b.newFeeSat - b.oldFeeSat)}"), fontWeight = FontWeight.SemiBold)
                         }
                     }
                     Spacer(Modifier.height(8.dp))
                     HayekButton(
-                        onClick = { vm.setNote(tx.txid, note); act.auth(vm, "Urychlit transakci", strong = true) { vm.broadcastBump() } },
+                        onClick = { vm.setNote(tx.txid, note); act.auth(vm, L("Urychlit transakci", "Speed up transaction"), strong = true) { vm.broadcastBump() } },
                         enabled = !vm.busy, modifier = Modifier.fillMaxWidth().height(52.dp)
-                    ) { Icon(Icons.Default.Fingerprint, null); Spacer(Modifier.width(6.dp)); Text("Podepsat a odeslat") }
-                    TextButton(onClick = { vm.bumpPrepared = null }, Modifier.fillMaxWidth()) { Text("Změnit poplatek") }
+                    ) { Icon(Icons.Default.Fingerprint, null); Spacer(Modifier.width(6.dp)); Text(L("Podepsat a odeslat", "Sign and send")) }
+                    TextButton(onClick = { vm.bumpPrepared = null }, Modifier.fillMaxWidth()) { Text(L("Změnit poplatek", "Change fee")) }
                 }
 
                 Spacer(Modifier.height(12.dp))
@@ -113,7 +113,7 @@ fun TxDetailDialog(tx: TxItem, vm: WalletViewModel, act: FragmentActivity) {
                     GlassButton(onClick = { openTx(ctx, vm, vm.txLink(tx.txid)) }, Modifier.weight(1f)) {
                         Icon(Icons.Default.OpenInNew, null); Spacer(Modifier.width(6.dp)); Text("Mempool")
                     }
-                    HayekButton(onClick = { close() }, Modifier.weight(1f)) { Text("Hotovo") }
+                    HayekButton(onClick = { close() }, Modifier.weight(1f)) { Text(L("Hotovo", "Done")) }
                 }
             }
         }

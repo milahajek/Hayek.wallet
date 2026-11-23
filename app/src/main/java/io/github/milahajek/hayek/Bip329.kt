@@ -95,12 +95,12 @@ object Bip329 {
     }
 
     fun decrypt(data: ByteArray, password: String): String {
-        require(isEncrypted(data) && data.size > MAGIC.size + 28) { "Soubor není zašifrovaná záloha Hayek." }
+        require(isEncrypted(data) && data.size > MAGIC.size + 28) { L("Soubor není zašifrovaná záloha Hayek.", "The file is not an encrypted Hayek backup.") }
         var p = MAGIC.size
         val salt = data.copyOfRange(p, p + 16); p += 16
         val iv = data.copyOfRange(p, p + 12); p += 12
         val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, key(password, salt), GCMParameterSpec(128, iv)) }
         return try { String(c.doFinal(data.copyOfRange(p, data.size)), UTF_8) }
-        catch (_: Exception) { throw IllegalArgumentException("Špatné heslo nebo poškozený soubor.") }
+        catch (_: Exception) { throw IllegalArgumentException(L("Špatné heslo nebo poškozený soubor.", "Wrong password or damaged file.")) }
     }
 }

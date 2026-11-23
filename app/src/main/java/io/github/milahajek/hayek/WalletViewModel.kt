@@ -116,8 +116,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             val desc = withContext(Dispatchers.IO) { c.publicDescriptor() }
             withContext(Dispatchers.IO) { IncomingNotifier.enable(ctx, desc) }
             notifyEnabled = true
-            message = "Upozornění zapnuta ✔\nTelefon se zhruba každých 15 minut podívá na váš uzel. " +
-                "Mimo domácí síť to funguje jen se zapnutou VPN (Teleport)."
+            message = L("Upozornění zapnuta ✔\nTelefon se zhruba každých 15 minut podívá na váš uzel. ", "Alerts on ✔\nAbout every 15 minutes the phone will check your node. ") +
+                L("Mimo domácí síť to funguje jen se zapnutou VPN (Teleport).", "Away from your home network it only works with VPN (Teleport) on.")
         } else {
             withContext(Dispatchers.IO) { IncomingNotifier.disable(ctx) }
             notifyEnabled = false
@@ -133,9 +133,9 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun contactFor(address: String): Contact? = Contacts.normalize(address)?.let { a -> contacts.find { it.address == a } }
     /** Vrací chybovou hlášku, nebo null při úspěchu. */
     fun saveContact(name: String, address: String): String? {
-        val a = Contacts.normalize(address) ?: return "Neplatná bitcoinová adresa."
-        val n = name.trim().takeIf { it.isNotEmpty() } ?: return "Zadejte jméno."
-        if (state?.address == a || coins.any { it.address == a }) return "Tohle je adresa vaší vlastní peněženky."
+        val a = Contacts.normalize(address) ?: return L("Neplatná bitcoinová adresa.", "Invalid bitcoin address.")
+        val n = name.trim().takeIf { it.isNotEmpty() } ?: return L("Zadejte jméno.", "Enter a name.")
+        if (state?.address == a || coins.any { it.address == a }) return L("Tohle je adresa vaší vlastní peněženky.", "This is an address of your own wallet.")
         saveContacts(Contacts.upsert(contacts, Contact(n.take(60), a))); return null
     }
     fun removeContact(c: Contact) = saveContacts(contacts - c)
@@ -173,10 +173,10 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         if (toFreeze.isNotEmpty()) {
             coins = withContext(Dispatchers.IO) { c.coins() }
             labelChanged()
-            message = (if (toFreeze.size == 1) "Přišla podezřelá drobná platba ${formatSat(toFreeze[0].valueSat)}."
-                else "Přišlo ${toFreeze.size} podezřelých drobných plateb (celkem ${formatSat(toFreeze.sumOf { it.valueSat })}).") +
-                "\n\nZmrazil jsem ji, aby se při placení nepropojila s vašimi ostatními mincemi (ochrana proti „dust attacku“). " +
-                "Pokud jde o platbu, kterou čekáte, rozmrazíte ji v Mincích (❄)."
+            message = (if (toFreeze.size == 1) L("Přišla podezřelá drobná platba ${formatSat(toFreeze[0].valueSat)}.", "A suspicious tiny payment arrived: ${formatSat(toFreeze[0].valueSat)}.")
+                else L("Přišlo ${toFreeze.size} podezřelých drobných plateb (celkem ${formatSat(toFreeze.sumOf { it.valueSat })}).", "${toFreeze.size} suspicious tiny payments arrived (total ${formatSat(toFreeze.sumOf { it.valueSat })}).")) +
+                L("\n\nZmrazil jsem ji, aby se při placení nepropojila s vašimi ostatními mincemi (ochrana proti „dust attacku“). ", "\n\nI froze it so it won't get linked with your other coins when paying (protection against a „dust attack“). ") +
+                L("Pokud jde o platbu, kterou čekáte, rozmrazíte ji v Mincích (❄).", "If it's a payment you're expecting, unfreeze it in Coins (❄).")
         }
     }
 
@@ -209,7 +209,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         }
         labelChanges = 0
         prefs.edit().putInt("label_changes", 0).putLong("labels_backup_at", System.currentTimeMillis()).apply()
-        message = "Štítky uloženy ✔\n" + (if (password.isEmpty()) "Soubor není šifrovaný – uložte ho na bezpečné místo." else "Soubor je zašifrovaný heslem. Bez hesla ho nikdo nepřečte.")
+        message = L("Štítky uloženy ✔\n", "Labels saved ✔\n") + (if (password.isEmpty()) L("Soubor není šifrovaný – uložte ho na bezpečné místo.", "The file is not encrypted – keep it somewhere safe.") else L("Soubor je zašifrovaný heslem. Bez hesla ho nikdo nepřečte.", "The file is encrypted with a password. Without the password nobody can read it."))
     }
 
     var labelsImportNeedsPassword by mutableStateOf<android.net.Uri?>(null)
@@ -217,7 +217,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     /** Načte zálohu. U šifrovaného souboru bez hesla si o heslo řekne. */
     fun importLabels(uri: android.net.Uri, password: String? = null) = run {
         val data = withContext(Dispatchers.IO) {
-            getApplication<Application>().contentResolver.openInputStream(uri)!!.use { it.readBytes() }.also { require(it.size < 5_000_000) { "Soubor je příliš velký." } }
+            getApplication<Application>().contentResolver.openInputStream(uri)!!.use { it.readBytes() }.also { require(it.size < 5_000_000) { L("Soubor je příliš velký.", "The file is too large.") } }
         }
         val text = if (Bip329.isEncrypted(data)) {
             if (password == null) { labelsImportNeedsPassword = uri; return@run }
@@ -225,7 +225,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         } else String(data)
         labelsImportNeedsPassword = null; offerLabelsImport = false
         val l = Bip329.parse(text)
-        require(l.size > 0) { "V souboru nejsou žádné štítky, které by Hayek Wallet znala." }
+        require(l.size > 0) { L("V souboru nejsou žádné štítky, které by Hayek Wallet znala.", "The file contains no labels Hayek Wallet understands.") }
         notesPrefs.edit().apply { l.notes.forEach { (k, v) -> putString(k, v) } }.apply(); notesVersion++
         if (l.contacts.isNotEmpty()) {
             val merged = l.contacts.entries.fold(contacts) { acc, (a, n) -> Contacts.normalize(a)?.let { Contacts.upsert(acc, Contact(n.take(60), it)) } ?: acc }
@@ -246,8 +246,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (frozen > 0) coins = lock.withLock { withContext(Dispatchers.IO) { c!!.coins() } }
         prepared = null
-        message = "Štítky načteny ✔\nPoznámky: ${l.notes.size} · značky mincí: ${l.outputs.count { it.value.tag != null }} · značky adres: ${l.addresses.size} · kontakty: ${l.contacts.size}" +
-            if (frozen > 0) " · změněno zmrazení: $frozen" else ""
+        message = L("Štítky načteny ✔\nPoznámky: ${l.notes.size} · značky mincí: ${l.outputs.count { it.value.tag != null }} · značky adres: ${l.addresses.size} · kontakty: ${l.contacts.size}", "Labels imported ✔\nNotes: ${l.notes.size} · coin tags: ${l.outputs.count { it.value.tag != null }} · address tags: ${l.addresses.size} · contacts: ${l.contacts.size}") +
+            if (frozen > 0) L(" · změněno zmrazení: $frozen", " · frozen state changed: $frozen") else ""
     }
 
     // ---------- Detail transakce a urychlení (RBF) ----------
@@ -268,7 +268,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun prepareBump(rate: String) = run {
         val c = core ?: return@run
         val tx = txDetail ?: return@run
-        val r = rate.trim().toLongOrNull() ?: throw IllegalArgumentException("Zadejte poplatek v sat/vB.")
+        val r = rate.trim().toLongOrNull() ?: throw IllegalArgumentException(L("Zadejte poplatek v sat/vB.", "Enter the fee in sat/vB."))
         bumpPrepared = lock.withLock { withContext(Dispatchers.IO) { c.prepareBump(tx.txid, r) } }
     }
 
@@ -280,8 +280,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         note(b.oldTxid).takeIf { it.isNotBlank() }?.let { setNote(newId, it) }
         tagRaw("t:${b.oldTxid}")?.let { tagPrefs.edit().putString("t:$newId", it).apply(); tagsVersion++; labelChanged() }
         bumpPrepared = null; txDetail = null
-        success = Success("Poplatek zvýšen")
-        message = "Poplatek zvýšen ✔\nNová transakce nahradila původní.\nTXID: $newId"
+        success = Success(L("Poplatek zvýšen", "Fee raised"))
+        message = L("Poplatek zvýšen ✔\nNová transakce nahradila původní.\nTXID: $newId", "Fee raised ✔\nThe new transaction replaced the original.\nTXID: $newId")
         syncNow()
     }
     var state by mutableStateOf<WalletState?>(null)
@@ -373,26 +373,26 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun friendly(e: Exception): String {
         if (e is CertMismatchException) {
-            return "⚠ CERTIFIKÁT UZLU SE ZMĚNIL – spojení odmítnuto.\n\n" +
-                "Server ${e.hostPort} se prokázal jiným certifikátem než minule. Může to znamenat, že se někdo v síti vydává za váš uzel.\n\n" +
-                "Pokud jste na uzlu certifikát sami změnili (reinstalace, aktualizace Fulcrumu/RaspiBlitzu), můžete v ⚙ Nastavení zvolit „Zapomenout certifikát“. Jinak se nepřipojujte.\n\n" +
-                "Uložený: ${e.expected.take(23)}…\nNový:      ${e.actual.take(23)}…"
+            return L("⚠ CERTIFIKÁT UZLU SE ZMĚNIL – spojení odmítnuto.\n\n", "⚠ THE NODE CERTIFICATE CHANGED – connection refused.\n\n") +
+                L("Server ${e.hostPort} se prokázal jiným certifikátem než minule. Může to znamenat, že se někdo v síti vydává za váš uzel.\n\n", "Server ${e.hostPort} presented a different certificate than last time. Someone on the network may be impersonating your node.\n\n") +
+                L("Pokud jste na uzlu certifikát sami změnili (reinstalace, aktualizace Fulcrumu/RaspiBlitzu), můžete v ⚙ Nastavení zvolit „Zapomenout certifikát“. Jinak se nepřipojujte.\n\n", "If you changed the certificate on the node yourself (reinstall, Fulcrum/RaspiBlitz update), choose „Forget certificate“ in ⚙ Settings. Otherwise don't connect.\n\n") +
+                L("Uložený: ${e.expected.take(23)}…\nNový:      ${e.actual.take(23)}…", "Saved: ${e.expected.take(23)}…\nNew:   ${e.actual.take(23)}…")
         }
         val m = e.message.orEmpty()
         val cls = e::class.simpleName.orEmpty()
         val tcpOnTls = serverUrl.trim().startsWith("tcp://") && m.contains("unexpected EOF", true)
         return when {
-            tcpOnTls -> "Spojení se hned přerušilo. Nejspíš jste zadali tcp:// na šifrovaný port.\n\n" +
-                "Na RaspiBlitzu: šifrovaně ssl://IP:50022 (Fulcrum) nebo ssl://IP:50002 (ElectRS), " +
-                "nešifrovaně tcp://IP:50021 (Fulcrum) nebo tcp://IP:50001 (ElectRS).\n\nDetail: $m"
-            m == NO_SERVER -> "Peněženka ještě neví, ke kterému uzlu se připojit.\n\nV ⚙ Nastavení zadejte adresu svého Electrum serveru (Fulcrum nebo ElectRS), např. ssl://192.168.0.10:50002."
-            m.contains("Insufficient funds", true) -> "Nedostatek prostředků (včetně poplatku)."
-            m.contains("dust", true) -> "Částka je příliš malá (pod limitem sítě)."
+            tcpOnTls -> L("Spojení se hned přerušilo. Nejspíš jste zadali tcp:// na šifrovaný port.\n\n", "The connection dropped immediately. You probably entered tcp:// for an encrypted port.\n\n") +
+                L("Na RaspiBlitzu: šifrovaně ssl://IP:50022 (Fulcrum) nebo ssl://IP:50002 (ElectRS), ", "On RaspiBlitz: encrypted ssl://IP:50022 (Fulcrum) or ssl://IP:50002 (ElectRS), ") +
+                L("nešifrovaně tcp://IP:50021 (Fulcrum) nebo tcp://IP:50001 (ElectRS).\n\nDetail: $m", "unencrypted tcp://IP:50021 (Fulcrum) or tcp://IP:50001 (ElectRS).\n\nDetail: $m")
+            m == NO_SERVER -> L("Peněženka ještě neví, ke kterému uzlu se připojit.\n\nV ⚙ Nastavení zadejte adresu svého Electrum serveru (Fulcrum nebo ElectRS), např. ssl://192.168.0.10:50002.", "The wallet doesn't know which node to connect to yet.\n\nIn ⚙ Settings enter your Electrum server address (Fulcrum or ElectRS), e.g. ssl://192.168.0.10:50002.")
+            m.contains("Insufficient funds", true) -> L("Nedostatek prostředků (včetně poplatku).", "Insufficient funds (including the fee).")
+            m.contains("dust", true) -> L("Částka je příliš malá (pod limitem sítě).", "The amount is too small (below the network limit).")
             cls.contains("Electrum") || m.contains("connection", true) || m.contains("timed out", true) ||
                 m.contains("refused", true) || m.contains("unreachable", true) || m.isBlank() ->
-                "Nepodařilo se spojit s vaším uzlem ($serverUrl).\n\n" +
-                    "• Je telefon ve stejné Wi-Fi síti jako uzel (nebo připojený přes VPN domů)?\n" +
-                    "• Běží na RaspiBlitzu Electrum server (Electrs/Fulcrum)?\n\n" +
+                L("Nepodařilo se spojit s vaším uzlem ($serverUrl).\n\n", "Couldn't connect to your node ($serverUrl).\n\n") +
+                    L("• Je telefon ve stejné Wi-Fi síti jako uzel (nebo připojený přes VPN domů)?\n", "• Is the phone on the same Wi-Fi as the node (or connected home via VPN)?\n") +
+                    L("• Běží na RaspiBlitzu Electrum server (Electrs/Fulcrum)?\n\n", "• Is the Electrum server (Electrs/Fulcrum) running on RaspiBlitz?\n\n") +
                     "Detail: ${if (m.isBlank()) cls else m}"
             else -> m.ifBlank { cls }
         }
@@ -452,14 +452,14 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         WatchOnly.validate(clean)
         WalletCore.WATCH_PREFIX + clean
     } catch (e: Exception) {
-        message = e.message ?: "Neplatný klíč"
+        message = e.message ?: L("Neplatný klíč", "Invalid key")
         null
     }
 
     fun checkRestore(input: String): String? = try {
         Seed.normalize(input)
     } catch (e: Exception) {
-        message = "Neplatná slova obnovovací fráze. Zkontrolujte pravopis, pořadí a počet slov."
+        message = L("Neplatná slova obnovovací fráze. Zkontrolujte pravopis, pořadí a počet slov.", "Invalid recovery phrase words. Check the spelling, order and number of words.")
         null
     }
 
@@ -533,13 +533,13 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun prepare(to: String, amount: String, sendAll: Boolean) = run {
         val c = core ?: return@run
         val sats = if (sendAll) 0L else amount.trim().toLongOrNull()
-            ?: throw IllegalArgumentException("Zadejte částku v satoshi (celé číslo).")
+            ?: throw IllegalArgumentException(L("Zadejte částku v satoshi (celé číslo).", "Enter the amount in satoshi (a whole number)."))
         val rate = feeRate.trim().toLongOrNull()
-            ?: throw IllegalArgumentException("Zadejte poplatek v sat/vB.")
+            ?: throw IllegalArgumentException(L("Zadejte poplatek v sat/vB.", "Enter the fee in sat/vB."))
         val groups = spendableGroups()
         val avoid = if (selected.isEmpty() && groups.size > 1) {
             val from = payFrom?.takeIf { it in groups }
-                ?: throw IllegalArgumentException("V peněžence máte mince s různými značkami. Vyberte nahoře, ze kterých chcete platit (např. jen Bez KYC).")
+                ?: throw IllegalArgumentException(L("V peněžence máte mince s různými značkami. Vyberte nahoře, ze kterých chcete platit (např. jen Bez KYC).", "Your wallet has coins with different tags. Choose above which ones to pay from (e.g. only No KYC)."))
             coins.filter { !it.frozen && coinTagKey(it) != from }.map { it.id }.toSet()
         } else emptySet()
         prepared = lock.withLock { withContext(Dispatchers.IO) { c.prepare(to, sats, rate, sendAll, selected, avoid) } }
@@ -555,8 +555,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             combineTags(inputTags(p))?.let { tagPrefs.edit().putString("t:$txid", it.key).apply(); tagsVersion++; labelChanged() }
             selected = emptySet()
             screen = Screen.Home
-            success = Success("Odesláno", formatSat(p.amountSat))
-            message = "Odesláno ✔\nTXID: $txid"
+            success = Success(L("Odesláno", "Sent"), formatSat(p.amountSat))
+            message = L("Odesláno ✔\nTXID: $txid", "Sent ✔\nTXID: $txid")
         } finally {
             // Ať to dopadlo jakkoli, nepřipravená transakce se nesmí odeslat podruhé a stav se musí načíst z uzlu.
             prepared = null
@@ -590,7 +590,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 io.github.milahajek.hayek.testServer(normalizeServerUrl(url), pins).also { pinVersion++ }
             } catch (e: Exception) {
-                friendly(e) + "\n\n— Podrobná diagnostika —\n" + diagnoseConnection(normalizeServerUrl(url), pins)
+                friendly(e) + L("\n\n— Podrobná diagnostika —\n", "\n\n— Detailed diagnostics —\n") + diagnoseConnection(normalizeServerUrl(url), pins)
             }
         }
     }
@@ -653,19 +653,19 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun saveLnLimit(sat: Long) { lnLimit = sat; prefs.edit().putLong("ln_limit", sat).apply() }
 
     private fun lnClient(cfg: LndConfig? = lnConfig) =
-        LndClient(cfg ?: throw IllegalStateException("Lightning není připojený. Nastavte ho v ⚙ Nastavení."), pins)
+        LndClient(cfg ?: throw IllegalStateException(L("Lightning není připojený. Nastavte ho v ⚙ Nastavení.", "Lightning is not connected. Set it up in ⚙ Settings.")), pins)
 
     fun lnPinned(): String? = lnConfig?.let { pins.get("ln:${it.hostPort}") }
 
     private fun lnFriendly(e: Exception): String {
-        if (e is CertMismatchException) return "⚠ CERTIFIKÁT LIGHTNING UZLU SE ZMĚNIL – spojení odmítnuto.\n\n" +
-            "Uzel ${e.hostPort} se prokázal jiným certifikátem než minule. Může to znamenat, že se někdo v síti vydává za váš uzel.\n\n" +
-            "Pokud se certifikát LND na RaspiBlitzu změnil (reset LND, aktualizace), v ⚙ Nastavení → Lightning zvolte „Odpojit“ a připojte se znovu.\n\n" +
-            "Uložený: ${e.expected.take(23)}…\nNový:      ${e.actual.take(23)}…"
+        if (e is CertMismatchException) return L("⚠ CERTIFIKÁT LIGHTNING UZLU SE ZMĚNIL – spojení odmítnuto.\n\n", "⚠ THE LIGHTNING NODE CERTIFICATE CHANGED – connection refused.\n\n") +
+            L("Uzel ${e.hostPort} se prokázal jiným certifikátem než minule. Může to znamenat, že se někdo v síti vydává za váš uzel.\n\n", "Node ${e.hostPort} presented a different certificate than last time. Someone on the network may be impersonating your node.\n\n") +
+            L("Pokud se certifikát LND na RaspiBlitzu změnil (reset LND, aktualizace), v ⚙ Nastavení → Lightning zvolte „Odpojit“ a připojte se znovu.\n\n", "If the LND certificate on RaspiBlitz changed (LND reset, update), choose „Disconnect“ in ⚙ Settings → Lightning and connect again.\n\n") +
+            L("Uložený: ${e.expected.take(23)}…\nNový:      ${e.actual.take(23)}…", "Saved: ${e.expected.take(23)}…\nNew:   ${e.actual.take(23)}…")
         if (e is LndException) return e.message.orEmpty()
         val m = e.message.orEmpty()
         return if (e is java.io.IOException || m.contains("timed out", true) || m.contains("refused", true) || m.contains("unreachable", true))
-            "Nepodařilo se spojit s Lightning uzlem (${lnConfig?.hostPort ?: ""}).\n\n• Je telefon ve stejné Wi-Fi jako uzel?\n• Běží na RaspiBlitzu LND (a je odemčené)?\n\nDetail: ${m.ifBlank { e::class.simpleName }}"
+            L("Nepodařilo se spojit s Lightning uzlem (${lnConfig?.hostPort ?: ""}).\n\n• Je telefon ve stejné Wi-Fi jako uzel?\n• Běží na RaspiBlitzu LND (a je odemčené)?\n\nDetail: ${m.ifBlank { e::class.simpleName }}", "Couldn't connect to the Lightning node (${lnConfig?.hostPort ?: ""}).\n\n• Is the phone on the same Wi-Fi as the node?\n• Is LND running on RaspiBlitz (and unlocked)?\n\nDetail: ${m.ifBlank { e::class.simpleName }}")
         else m.ifBlank { e::class.simpleName.orEmpty() }
     }
 
@@ -704,7 +704,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         lnChannels = chans
         prefs.edit().putString("ln_backup_set", channelSetKey(chans)).putLong("ln_backup_at", System.currentTimeMillis()).apply()
         lnBackupVersion++
-        message = "Záloha kanálů uložena ✔\nUzel ji ověřil (kanálů: ${chans.size}).\n\nObnova: na uzlu z 24 slov LND + tohoto souboru (RaspiBlitz ho chce pod názvem channel.backup)."
+        message = L("Záloha kanálů uložena ✔\nUzel ji ověřil (kanálů: ${chans.size}).\n\nObnova: na uzlu z 24 slov LND + tohoto souboru (RaspiBlitz ho chce pod názvem channel.backup).", "Channel backup saved ✔\nThe node verified it (channels: ${chans.size}).\n\nRestore: on the node from the 24 LND words + this file (RaspiBlitz wants it named channel.backup).")
     }
 
     private suspend fun lnRefreshQuiet() {
@@ -737,9 +737,9 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                 onOk(withContext(Dispatchers.IO) { lnClient(cfg).info() })
             }
             else -> throw IllegalStateException(
-                "⚠ Certifikát serveru NESOUHLASÍ s otiskem z QR kódu – připojení zastaveno, klíč nebyl odeslán.\n\n" +
-                    "Možná se někdo v síti vydává za váš uzel. Zkontrolujte, že jste ve své domácí síti, a zkuste to znovu.\n\n" +
-                    "V QR: ${cfg.certFp.take(23)}…\nServer: ${fp.take(23)}…"
+                L("⚠ Certifikát serveru NESOUHLASÍ s otiskem z QR kódu – připojení zastaveno, klíč nebyl odeslán.\n\n", "⚠ The server certificate DOES NOT match the fingerprint in the QR code – connection stopped, the key was not sent.\n\n") +
+                    L("Možná se někdo v síti vydává za váš uzel. Zkontrolujte, že jste ve své domácí síti, a zkuste to znovu.\n\n", "Someone on the network may be impersonating your node. Make sure you're on your home network and try again.\n\n") +
+                    L("V QR: ${cfg.certFp.take(23)}…\nServer: ${fp.take(23)}…", "In QR: ${cfg.certFp.take(23)}…\nServer: ${fp.take(23)}…")
             )
         }
     }
@@ -756,7 +756,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         lnConfig = cfg
         lnRefreshQuiet()
         screen = Screen.Lightning
-        message = "Lightning připojen ✔" + (lnInfo?.let { "\nUzel: ${it.alias}, aktivní kanály: ${it.activeChannels}" } ?: "")
+        message = L("Lightning připojen ✔", "Lightning connected ✔") + (lnInfo?.let { L("\nUzel: ${it.alias}, aktivní kanály: ${it.activeChannels}", "\nNode: ${it.alias}, active channels: ${it.activeChannels}") } ?: "")
     }
 
     fun lnRemove() {
@@ -778,7 +778,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun lnDecode(raw: String) = lnRun {
         lnDecoded = null
         val d = withContext(Dispatchers.IO) { lnClient().decode(raw) }
-        if (d.expired()) throw IllegalArgumentException("Faktura vypršela. Požádejte příjemce o novou.")
+        if (d.expired()) throw IllegalArgumentException(L("Faktura vypršela. Požádejte příjemce o novou.", "The invoice has expired. Ask the recipient for a new one."))
         lnDecoded = d
     }
 
@@ -787,14 +787,14 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     /** Volat až po ověření otiskem. */
     fun lnPay(amountOverride: Long?) = lnRun {
         val d = lnDecoded ?: return@lnRun
-        val amount = if (d.amountSat > 0) d.amountSat else amountOverride ?: throw IllegalArgumentException("Zadejte částku.")
-        if (amount > lnLimit) throw IllegalArgumentException("Částka ${amount} sat je nad vaším limitem ${lnLimit} sat na jednu platbu (⚙ Nastavení → Lightning).")
+        val amount = if (d.amountSat > 0) d.amountSat else amountOverride ?: throw IllegalArgumentException(L("Zadejte částku.", "Enter an amount."))
+        if (amount > lnLimit) throw IllegalArgumentException(L("Částka ${amount} sat je nad vaším limitem ${lnLimit} sat na jednu platbu (⚙ Nastavení → Lightning).", "Amount ${amount} sat is above your limit of ${lnLimit} sat per payment (⚙ Settings → Lightning)."))
         val r = withContext(Dispatchers.IO) { lnClient().pay(d.paymentRequest, lnFeeLimit(amount), amountOverride.takeIf { d.amountSat == 0L }) }
         if (r.ok) {
             lnDecoded = null
             screen = Screen.Lightning
-            success = Success("Zaplaceno", formatSat(amount), lightning = true)
-            message = "Zaplaceno ⚡ ✔\n${amount} sat, poplatek ${r.feeSat} sat"
+            success = Success(L("Zaplaceno", "Paid"), formatSat(amount), lightning = true)
+            message = L("Zaplaceno ⚡ ✔\n${amount} sat, poplatek ${r.feeSat} sat", "Paid ⚡ ✔\n${amount} sat, fee ${r.feeSat} sat")
         } else message = r.failure
         lnRefreshQuiet()
     }
@@ -810,7 +810,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             while (System.currentTimeMillis() < until && lnInvoice == inv && screen == Screen.LnReceive) {
                 delay(2_500)
                 val paid = try { withContext(Dispatchers.IO) { lnClient().isSettled(inv.rHashHex) } } catch (_: Exception) { false }
-                if (paid && lnInvoice == inv) { lnInvoicePaid = true; success = Success("Přijato", inv.amountSat.takeIf { it > 0 }?.let { formatSat(it) }, lightning = true); lnRefreshQuiet(); break }
+                if (paid && lnInvoice == inv) { lnInvoicePaid = true; success = Success(L("Přijato", "Received"), inv.amountSat.takeIf { it > 0 }?.let { formatSat(it) }, lightning = true); lnRefreshQuiet(); break }
             }
         }
     }

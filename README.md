@@ -58,7 +58,7 @@ GNU General Public License v3.0 nebo novější – viz [`LICENSE`](LICENSE). Li
 
 ## English
 
-> ⚠️ **Experimental, unaudited software.** Use with small amounts only. Provided "as is", without any warranty (see `LICENSE`). The user interface is currently in Czech.
+> ⚠️ **Experimental, unaudited software.** Use with small amounts only. Provided "as is", without any warranty (see `LICENSE`). The app is available in English and Czech.
 
 **Features**
 

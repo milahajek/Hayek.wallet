@@ -46,7 +46,7 @@ fun TagMenu(current: CoinTag?, enabled: Boolean = true, onPick: (CoinTag?) -> Un
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }, enabled = enabled) {
-            Icon(Icons.Default.Sell, "Označit původ mince", tint = current?.color ?: MaterialTheme.colorScheme.outline)
+            Icon(Icons.Default.Sell, L("Označit původ mince", "Tag coin origin"), tint = current?.color ?: MaterialTheme.colorScheme.outline)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             (CoinTag.entries.map { it as CoinTag? } + null).forEach { t ->
@@ -87,7 +87,7 @@ fun TagBalances(vm: WalletViewModel) {
         ) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(CoinTag.UNTAGGED_COLOR))
             Spacer(Modifier.width(6.dp))
-            Text("Neoznačené: ${vm.amount(none)} · označit", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(L("Neoznačené: ${vm.amount(none)} · označit", "Untagged: ${vm.amount(none)} · tag"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -117,8 +117,8 @@ fun PayFromPicker(vm: WalletViewModel) {
     if (vm.selected.isNotEmpty() || groups.size < 2) return
     GlassCard(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Column(Modifier.padding(14.dp)) {
-            Text("Platit z mincí", fontWeight = FontWeight.SemiBold)
-            Text("Máte mince s různým původem. Platba použije jen zvolenou skupinu, takže se nesmíchají.",
+            Text(L("Platit z mincí", "Pay from coins"), fontWeight = FontWeight.SemiBold)
+            Text(L("Máte mince s různým původem. Platba použije jen zvolenou skupinu, takže se nesmíchají.", "You have coins of different origin. The payment will only use the chosen group, so they don't get mixed."),
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(10.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -128,7 +128,7 @@ fun PayFromPicker(vm: WalletViewModel) {
                     }
                 }
             }
-            if (vm.payFrom == null) Text("Vyberte skupinu.", color = HayekOrange, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+            if (vm.payFrom == null) Text(L("Vyberte skupinu.", "Choose a group."), color = HayekOrange, fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
         }
     }
 }
@@ -141,13 +141,13 @@ fun ReceiveTagPicker(vm: WalletViewModel, address: String) {
     val cur = vm.addressTag(address)
     GlassCard(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
         Column(Modifier.padding(14.dp)) {
-            Text("Původ platby na tuto adresu", fontWeight = FontWeight.SemiBold)
-            Text("Mince, které sem přijdou, se samy označí. Např. výběr z burzy = KYC, nákup na Bisq nebo osobně = Bez KYC.",
+            Text(L("Původ platby na tuto adresu", "Origin of payments to this address"), fontWeight = FontWeight.SemiBold)
+            Text(L("Mince, které sem přijdou, se samy označí. Např. výběr z burzy = KYC, nákup na Bisq nebo osobně = Bez KYC.", "Coins arriving here get tagged automatically. E.g. exchange withdrawal = KYC, Bisq or in-person purchase = No KYC."),
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(10.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 (CoinTag.entries.map { it as CoinTag? } + null).forEach { t ->
-                    TagPill(CoinTag.keyOf(t), if (t == null) "Neoznačovat" else t.label, selected = cur == t) { vm.setAddressTag(address, t) }
+                    TagPill(CoinTag.keyOf(t), if (t == null) L("Neoznačovat", "Don't tag") else t.label, selected = cur == t) { vm.setAddressTag(address, t) }
                 }
             }
         }
@@ -160,7 +160,7 @@ fun MixWarning(tags: List<CoinTag?>, ack: Boolean, onAck: (Boolean) -> Unit) {
     val keys = tags.map { CoinTag.keyOf(it) }.distinct()
     if (keys.size > 1 || keys.firstOrNull() != CoinTag.NONE) {
         Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Mince: ", fontSize = 14.sp)
+            Text(L("Mince: ", "Coins: "), fontSize = 14.sp)
             keys.forEach { TagPill(it); Spacer(Modifier.width(4.dp)) }
         }
     }
@@ -169,12 +169,12 @@ fun MixWarning(tags: List<CoinTag?>, ack: Boolean, onAck: (Boolean) -> Unit) {
         Modifier.fillMaxWidth().padding(top = 10.dp).clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.errorContainer).padding(12.dp)
     ) {
-        Text("⚠ Mícháte mince Bez KYC s ostatními", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
-        Text("Po odeslání bude z blockchainu vidět, že patří stejnému majiteli – mince bez KYC se tím natrvalo propojí s vaší identitou. Vrátit to nejde.",
+        Text(L("⚠ Mícháte mince Bez KYC s ostatními", "⚠ You are mixing No-KYC coins with others"), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
+        Text(L("Po odeslání bude z blockchainu vidět, že patří stejnému majiteli – mince bez KYC se tím natrvalo propojí s vaší identitou. Vrátit to nejde.", "After sending, the blockchain will show they belong to the same owner – your No-KYC coins get permanently linked to your identity. This cannot be undone."),
             fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer)
         Row(Modifier.clickable { onAck(!ack) }, verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = ack, onCheckedChange = onAck)
-            Text("Rozumím, přesto je chci použít společně", fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+            Text(L("Rozumím, přesto je chci použít společně", "I understand, use them together anyway"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer)
         }
     }
 }
@@ -194,14 +194,14 @@ fun TxTagChip(vm: WalletViewModel, txid: String, incoming: Boolean) {
     var open by remember { mutableStateOf(false) }
     Box(Modifier.padding(top = 4.dp)) {
         when {
-            tags.size > 1 -> TagPill(CoinTag.NONE, "Různé značky ▾", selected = false, compact = true) { open = true }
-            tag == null -> TagPill(CoinTag.NONE, "Označit původ ▾", selected = false, compact = true) { open = true }
+            tags.size > 1 -> TagPill(CoinTag.NONE, L("Různé značky ▾", "Mixed tags ▾"), selected = false, compact = true) { open = true }
+            tag == null -> TagPill(CoinTag.NONE, L("Označit původ ▾", "Tag origin ▾"), selected = false, compact = true) { open = true }
             else -> TagPill(tag.key, "${tag.label} ▾", compact = true) { open = true }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             (CoinTag.entries.map { it as CoinTag? } + null).forEach { t ->
                 DropdownMenuItem(
-                    text = { TagPill(CoinTag.keyOf(t), if (t == null) "Neoznačeno" else t.label, selected = tags.size == 1 && t == tag) },
+                    text = { TagPill(CoinTag.keyOf(t), if (t == null) L("Neoznačeno", "Untagged") else t.label, selected = tags.size == 1 && t == tag) },
                     onClick = { open = false; vm.setCoinTag(own.map { it.id }, t) },
                 )
             }
@@ -217,23 +217,23 @@ fun DustPill(frozen: Boolean = true) {
         Modifier.clip(RoundedCornerShape(50)).background(c.copy(alpha = 0.14f)).border(1.dp, c, RoundedCornerShape(50))
             .padding(horizontal = 10.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
-    ) { Text(if (frozen) "⚠ prach – zmrazeno" else "⚠ prach", fontSize = 12.sp, fontWeight = FontWeight.Medium) }
+    ) { Text(if (frozen) L("⚠ prach – zmrazeno", "⚠ dust – frozen") else L("⚠ prach", "⚠ dust"), fontSize = 12.sp, fontWeight = FontWeight.Medium) }
 }
 
 /** Nastavení ochrany proti prachu. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DustSection(vm: WalletViewModel) {
-    Text("Ochrana proti prachu", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-    Text("Útočníci posílají na cizí adresy drobné částky („dust attack“). Kdo by je utratil s ostatními mincemi, prozradí, že patří jednomu majiteli. " +
-        "Příchozí mince pod zvolenou hranicí se proto samy zmrazí. Vlastní drobné z plateb se to netýká.",
+    Text(L("Ochrana proti prachu", "Dust protection"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    Text(L("Útočníci posílají na cizí adresy drobné částky („dust attack“). Kdo by je utratil s ostatními mincemi, prozradí, že patří jednomu majiteli. ", "Attackers send tiny amounts to other people's addresses („dust attack“). Spending them together with other coins reveals they belong to one owner. ") +
+        L("Příchozí mince pod zvolenou hranicí se proto samy zmrazí. Vlastní drobné z plateb se to netýká.", "So incoming coins below the chosen threshold are frozen automatically. Your own change is not affected."),
         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(Modifier.height(8.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Dust.CHOICES.forEach { v ->
             FilterChip(
                 selected = vm.dustThreshold == v, onClick = { vm.saveDustThreshold(v) },
-                label = { Text(if (v == 0L) "Vypnuto" else "pod ${formatSat(v)}") },
+                label = { Text(if (v == 0L) L("Vypnuto", "Off") else L("pod ${formatSat(v)}", "below ${formatSat(v)}")) },
                 leadingIcon = if (vm.dustThreshold == v) { { Icon(Icons.Default.Check, null, Modifier.size(18.dp)) } } else null,
             )
         }

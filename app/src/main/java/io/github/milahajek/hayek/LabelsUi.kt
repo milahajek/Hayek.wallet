@@ -34,14 +34,14 @@ fun LabelsSection(vm: WalletViewModel) {
         if (uri != null) vm.importLabels(uri)
     }
 
-    Text("Štítky a poznámky", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-    Text("Poznámky k transakcím, značky Bez KYC / KYC a zmrazené mince jsou jen v tomto telefonu – obnovovací slova je neobsahují. " +
-        "Zálohujte je do souboru (standard BIP-329, umí ho i Sparrow Wallet).",
+    Text(L("Štítky a poznámky", "Labels and notes"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    Text(L("Poznámky k transakcím, značky Bez KYC / KYC a zmrazené mince jsou jen v tomto telefonu – obnovovací slova je neobsahují. ", "Transaction notes, No-KYC / KYC tags and frozen coins exist only on this phone – the recovery words don't contain them. ") +
+        L("Zálohujte je do souboru (standard BIP-329, umí ho i Sparrow Wallet).", "Back them up to a file (BIP-329 standard, Sparrow Wallet supports it too)."),
         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     val last = vm.lastLabelsBackup
     val status = when {
-        vm.labelChanges > 0 -> "● Od poslední zálohy: ${vm.labelChanges} ${changesWord(vm.labelChanges)}" + if (last == 0L) " (zatím nezálohováno)" else ""
-        last > 0 -> "✔ Zálohováno ${SimpleDateFormat("d. M. yyyy", Locale.forLanguageTag("cs")).format(Date(last))}"
+        vm.labelChanges > 0 -> L("● Od poslední zálohy: ${vm.labelChanges} ${changesWord(vm.labelChanges)}", "● Since last backup: ${vm.labelChanges} ${changesWord(vm.labelChanges)}") + if (last == 0L) L(" (zatím nezálohováno)", " (not backed up yet)") else ""
+        last > 0 -> L("✔ Zálohováno ", "✔ Backed up ") + fmtDate(last)
         else -> null
     }
     status?.let {
@@ -51,10 +51,10 @@ fun LabelsSection(vm: WalletViewModel) {
     Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         GlassButton(onClick = { askExport = true }, Modifier.weight(1f), enabled = !vm.busy) {
-            Icon(Icons.Default.Upload, null); Spacer(Modifier.width(6.dp)); Text("Zálohovat")
+            Icon(Icons.Default.Upload, null); Spacer(Modifier.width(6.dp)); Text(L("Zálohovat", "Back up"))
         }
         GlassButton(onClick = { openLauncher.launch(arrayOf("*/*")) }, Modifier.weight(1f), enabled = !vm.busy) {
-            Icon(Icons.Default.Download, null); Spacer(Modifier.width(6.dp)); Text("Načíst")
+            Icon(Icons.Default.Download, null); Spacer(Modifier.width(6.dp)); Text(L("Načíst", "Import"))
         }
     }
 
@@ -69,9 +69,9 @@ fun LabelsSection(vm: WalletViewModel) {
     )
     vm.labelsImportNeedsPassword?.let { uri ->
         PasswordDialog(
-            title = "Zašifrovaná záloha",
-            text = "Zadejte heslo, kterým jste zálohu zašifroval.",
-            confirm = "Načíst",
+            title = L("Zašifrovaná záloha", "Encrypted backup"),
+            text = L("Zadejte heslo, kterým jste zálohu zašifroval.", "Enter the password you encrypted the backup with."),
+            confirm = L("Načíst", "Import"),
             onDismiss = { vm.labelsImportNeedsPassword = null },
             onConfirm = { vm.importLabels(uri, it) },
         )
@@ -86,31 +86,31 @@ internal fun ExportLabelsDialog(count: Int, onDismiss: () -> Unit, onConfirm: (S
     val pwOk = !encrypt || (pw.length >= 8 && pw == pw2)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Zálohovat štítky") },
+        title = { Text(L("Zálohovat štítky", "Back up labels")) },
         text = {
             Column {
-                Text("Položek k uložení: $count. Soubor neobsahuje klíče, ale prozrazuje historii vašich plateb.", fontSize = 14.sp)
+                Text(L("Položek k uložení: $count. Soubor neobsahuje klíče, ale prozrazuje historii vašich plateb.", "Items to save: $count. The file contains no keys, but reveals your payment history."), fontSize = 14.sp)
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.clickable { encrypt = true }, verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(encrypt, { encrypt = true }); Text("Zašifrovat heslem (doporučeno)", fontSize = 14.sp)
+                    RadioButton(encrypt, { encrypt = true }); Text(L("Zašifrovat heslem (doporučeno)", "Encrypt with a password (recommended)"), fontSize = 14.sp)
                 }
                 Row(Modifier.clickable { encrypt = false }, verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(!encrypt, { encrypt = false }); Text("Nešifrovaně – pro Sparrow a jiné peněženky", fontSize = 14.sp)
+                    RadioButton(!encrypt, { encrypt = false }); Text(L("Nešifrovaně – pro Sparrow a jiné peněženky", "Unencrypted – for Sparrow and other wallets"), fontSize = 14.sp)
                 }
                 if (encrypt) {
-                    OutlinedTextField(pw, { pw = it }, label = { Text("Heslo (aspoň 8 znaků)") }, singleLine = true,
+                    OutlinedTextField(pw, { pw = it }, label = { Text(L("Heslo (aspoň 8 znaků)", "Password (at least 8 characters)")) }, singleLine = true,
                         visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(pw2, { pw2 = it }, label = { Text("Heslo znovu") }, singleLine = true,
+                    OutlinedTextField(pw2, { pw2 = it }, label = { Text(L("Heslo znovu", "Password again")) }, singleLine = true,
                         visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         isError = pw2.isNotEmpty() && pw != pw2, modifier = Modifier.fillMaxWidth())
-                    Text("Heslo si zapamatujte – bez něj zálohu nikdo neotevře, ani vy.", fontSize = 12.sp,
+                    Text(L("Heslo si zapamatujte – bez něj zálohu nikdo neotevře, ani vy.", "Remember the password – without it nobody can open the backup, not even you."), fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { onConfirm(if (encrypt) pw else "") }, enabled = pwOk && count > 0) { Text("Vybrat místo uložení") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušit") } },
+        confirmButton = { TextButton(onClick = { onConfirm(if (encrypt) pw else "") }, enabled = pwOk && count > 0) { Text(L("Vybrat místo uložení", "Choose where to save")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(L("Zrušit", "Cancel")) } },
     )
 }
 
@@ -124,17 +124,17 @@ private fun PasswordDialog(title: String, text: String, confirm: String, onDismi
             Column {
                 Text(text, fontSize = 14.sp)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(pw, { pw = it }, label = { Text("Heslo") }, singleLine = true,
+                OutlinedTextField(pw, { pw = it }, label = { Text(L("Heslo", "Password")) }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = { TextButton(onClick = { onConfirm(pw) }, enabled = pw.isNotEmpty()) { Text(confirm) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušit") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(L("Zrušit", "Cancel")) } },
     )
 }
 
-fun changesWord(n: Int) = when { n == 1 -> "změna"; n in 2..4 -> "změny"; else -> "změn" }
+fun changesWord(n: Int) = when { n == 1 -> L("změna", "change"); n in 2..4 -> L("změny", "changes"); else -> L("změn", "changes") }
 
 /** Po obnově ze slov: nabídka načíst zálohu štítků. */
 @Composable
@@ -145,16 +145,16 @@ fun OfferLabelsImportDialog(vm: WalletViewModel) {
     if (vm.labelsImportNeedsPassword == null) AlertDialog(
         onDismissRequest = { vm.offerLabelsImport = false },
         icon = { Icon(Icons.Default.Download, null) },
-        title = { Text("Peněženka obnovena ✔") },
+        title = { Text(L("Peněženka obnovena ✔", "Wallet restored ✔")) },
         text = {
-            Text("Máte zálohu štítků (poznámky, značky Bez KYC / KYC, zmrazené mince)? Načtěte ji teď. " +
-                "Později to jde i v Nastavení → Štítky a poznámky.", fontSize = 14.sp)
+            Text(L("Máte zálohu štítků (poznámky, značky Bez KYC / KYC, zmrazené mince)? Načtěte ji teď. ", "Do you have a label backup (notes, No-KYC / KYC tags, frozen coins)? Import it now. ") +
+                L("Později to jde i v Nastavení → Štítky a poznámky.", "You can also do it later in Settings → Labels and notes."), fontSize = 14.sp)
         },
-        confirmButton = { TextButton(onClick = { openLauncher.launch(arrayOf("*/*")) }) { Text("Načíst zálohu") } },
-        dismissButton = { TextButton(onClick = { vm.offerLabelsImport = false }) { Text("Nemám / teď ne") } },
+        confirmButton = { TextButton(onClick = { openLauncher.launch(arrayOf("*/*")) }) { Text(L("Načíst zálohu", "Import backup")) } },
+        dismissButton = { TextButton(onClick = { vm.offerLabelsImport = false }) { Text(L("Nemám / teď ne", "I don't have one / not now")) } },
     )
     vm.labelsImportNeedsPassword?.let { uri ->
-        PasswordDialog("Zašifrovaná záloha", "Zadejte heslo, kterým jste zálohu zašifroval.", "Načíst",
+        PasswordDialog(L("Zašifrovaná záloha", "Encrypted backup"), L("Zadejte heslo, kterým jste zálohu zašifroval.", "Enter the password you encrypted the backup with."), L("Načíst", "Import"),
             onDismiss = { vm.labelsImportNeedsPassword = null }, onConfirm = { vm.importLabels(uri, it) })
     }
 }
@@ -165,12 +165,12 @@ fun NotifySection(vm: WalletViewModel) {
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.setNotify(true)
-        else vm.message = "Bez povolení oznámení nemůže aplikace upozorňovat. Povolíte ho v Nastavení telefonu → Aplikace → Hayek Wallet → Oznámení."
+        else vm.message = L("Bez povolení oznámení nemůže aplikace upozorňovat. Povolíte ho v Nastavení telefonu → Aplikace → Hayek Wallet → Oznámení.", "Without notification permission the app can't alert you. Allow it in phone Settings → Apps → Hayek Wallet → Notifications.")
     }
-    Text("Upozornění na platby", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    Text(L("Upozornění na platby", "Payment alerts"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Dát vědět, když přijdou bitcoiny – i když je aplikace zavřená. Telefon se asi každých 15 minut podívá na váš uzel " +
-            "(jen veřejná data, bez klíčů). Mimo domov jen se zapnutou VPN.",
+        Text(L("Dát vědět, když přijdou bitcoiny – i když je aplikace zavřená. Telefon se asi každých 15 minut podívá na váš uzel ", "Let me know when bitcoin arrives – even when the app is closed. About every 15 minutes the phone checks your node ") +
+            L("(jen veřejná data, bez klíčů). Mimo domov jen se zapnutou VPN.", "(public data only, no keys). Away from home only with VPN on."),
             fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(8.dp))
         Switch(checked = vm.notifyEnabled, enabled = !vm.busy, onCheckedChange = { on ->

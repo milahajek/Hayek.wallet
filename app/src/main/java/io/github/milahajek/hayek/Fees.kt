@@ -36,9 +36,9 @@ fun FeePicker(
 ) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Poplatek", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(L("Poplatek", "Fee"), fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Text(
-                if (estimates != null) "podle vašeho uzlu" else if (loading) "zjišťuji u vašeho uzlu…" else "odhad není k dispozici",
+                if (estimates != null) L("podle vašeho uzlu", "from your node") else if (loading) L("zjišťuji u vašeho uzlu…", "asking your node…") else L("odhad není k dispozici", "estimate not available"),
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -57,7 +57,7 @@ fun FeePicker(
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onChoice(FeeChoice.CUSTOM) }.padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically) {
             RadioButton(selected = choice == FeeChoice.CUSTOM, onClick = { onChoice(FeeChoice.CUSTOM) })
-            Text("Vlastní poplatek", fontSize = 14.sp)
+            Text(L("Vlastní poplatek", "Custom fee"), fontSize = 14.sp)
         }
         if (choice == FeeChoice.CUSTOM) {
             OutlinedTextField(
@@ -68,17 +68,17 @@ fun FeePicker(
                     val v = rate.toLongOrNull()
                     Text(
                         when {
-                            v == null -> "Zadejte celé číslo (1–500)."
-                            v < minRate -> "Musí být aspoň $minRate sat/vB."
-                            else -> "Běžná platba ≈ ${formatSat(v * TYPICAL_TX_VBYTES)}" +
-                                (estimates?.let { e -> " · " + when { v >= e.fast -> "rychlé potvrzení"; v >= e.normal -> "asi do hodiny"; v >= e.slow -> "do dne"; else -> "může trvat i dny" } } ?: "")
+                            v == null -> L("Zadejte celé číslo (1–500).", "Enter a whole number (1–500).")
+                            v < minRate -> L("Musí být aspoň $minRate sat/vB.", "Must be at least $minRate sat/vB.")
+                            else -> L("Běžná platba ≈ ${formatSat(v * TYPICAL_TX_VBYTES)}", "Typical payment ≈ ${formatSat(v * TYPICAL_TX_VBYTES)}") +
+                                (estimates?.let { e -> " · " + when { v >= e.fast -> L("rychlé potvrzení", "fast confirmation"); v >= e.normal -> L("asi do hodiny", "within about an hour"); v >= e.slow -> L("do dne", "within a day"); else -> L("může trvat i dny", "may take days") } } ?: "")
                         }
                     )
                 }
             )
         } else {
             Text(
-                "sat/vB = satoshi za virtuální bajt velikosti transakce. Běžná platba má asi $TYPICAL_TX_VBYTES vB; přesný poplatek uvidíte v souhrnu před odesláním.",
+                L("sat/vB = satoshi za virtuální bajt velikosti transakce. Běžná platba má asi $TYPICAL_TX_VBYTES vB; přesný poplatek uvidíte v souhrnu před odesláním.", "sat/vB = satoshi per virtual byte of transaction size. A typical payment is about $TYPICAL_TX_VBYTES vB; you'll see the exact fee in the summary before sending."),
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
