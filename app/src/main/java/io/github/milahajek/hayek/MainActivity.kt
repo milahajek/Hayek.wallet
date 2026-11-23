@@ -874,6 +874,8 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
 
         if (vm.isOpen) {
             HorizontalDivider(Modifier.padding(vertical = 20.dp))
+            LabelsSection(vm)
+            HorizontalDivider(Modifier.padding(vertical = 20.dp))
             Text("Bezpečnost", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             if (!vm.watchOnly) GlassButton(onClick = { vm.screen = Screen.Seed }, Modifier.fillMaxWidth()) { Text("Zobrazit obnovovací frázi") }

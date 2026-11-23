@@ -1,0 +1,1 @@
+Label backup (BIP-329): notes, No-KYC / KYC tags and frozen coins to a file – password-encrypted or plain for Sparrow. Import from Sparrow too.

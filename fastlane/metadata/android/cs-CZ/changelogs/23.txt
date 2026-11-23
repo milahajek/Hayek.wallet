@@ -1,0 +1,1 @@
+Záloha štítků (BIP-329): poznámky, značky Bez KYC / KYC a zmrazené mince do souboru – zašifrovaně heslem, nebo nešifrovaně pro Sparrow. Načtení i ze Sparrow.

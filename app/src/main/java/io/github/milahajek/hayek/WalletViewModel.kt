@@ -102,6 +102,62 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         coins.filter { !it.frozen }.groupBy { coinTagKey(it) }.mapValues { (_, v) -> v.sumOf { it.valueSat } }
     fun inputTags(p: PreparedTx): List<CoinTag?> = p.inputIds.map { id -> coins.find { it.id == id }?.let { coinTag(it) } }
 
+    // ---------- Záloha štítků (BIP-329) ----------
+    /** Sestaví zálohu: poznámky, značky adres, značky a zmrazení současných mincí. */
+    fun labelsForExport(): Bip329.Labels {
+        val notes = notesPrefs.all.mapNotNull { (k, v) -> (v as? String)?.takeIf { it.isNotBlank() }?.let { k to it } }.toMap()
+        val addrs = tagPrefs.all.mapNotNull { (k, v) -> if (k.startsWith("a:")) CoinTag.of(v as? String)?.let { k.removePrefix("a:") to it } else null }.toMap()
+        val outs = coins.mapNotNull { c ->
+            val t = coinTag(c)
+            if (t == null && !c.frozen) null else c.id to Bip329.Output(t, if (c.frozen) false else null)
+        }.toMap()
+        return Bip329.Labels(notes, outs, addrs)
+    }
+
+    /** Uloží zálohu do souboru (uri ze systémového dialogu). Prázdné heslo = nešifrovaně (čitelné i ve Sparrow). */
+    fun exportLabels(uri: android.net.Uri, password: String) = run {
+        val text = Bip329.toJsonl(labelsForExport())
+        val bytes = withContext(Dispatchers.Default) { if (password.isEmpty()) text.toByteArray() else Bip329.encrypt(text, password) }
+        withContext(Dispatchers.IO) {
+            getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) }
+        }
+        message = "Štítky uloženy ✔\n" + (if (password.isEmpty()) "Soubor není šifrovaný – uložte ho na bezpečné místo." else "Soubor je zašifrovaný heslem. Bez hesla ho nikdo nepřečte.")
+    }
+
+    var labelsImportNeedsPassword by mutableStateOf<android.net.Uri?>(null)
+
+    /** Načte zálohu. U šifrovaného souboru bez hesla si o heslo řekne. */
+    fun importLabels(uri: android.net.Uri, password: String? = null) = run {
+        val data = withContext(Dispatchers.IO) {
+            getApplication<Application>().contentResolver.openInputStream(uri)!!.use { it.readBytes() }.also { require(it.size < 5_000_000) { "Soubor je příliš velký." } }
+        }
+        val text = if (Bip329.isEncrypted(data)) {
+            if (password == null) { labelsImportNeedsPassword = uri; return@run }
+            withContext(Dispatchers.Default) { Bip329.decrypt(data, password) }
+        } else String(data)
+        labelsImportNeedsPassword = null
+        val l = Bip329.parse(text)
+        require(l.size > 0) { "V souboru nejsou žádné štítky, které by Hayek Wallet znala." }
+        notesPrefs.edit().apply { l.notes.forEach { (k, v) -> putString(k, v) } }.apply(); notesVersion++
+        tagPrefs.edit().apply {
+            l.addresses.forEach { (a, t) -> putString("a:$a", t.key) }
+            l.outputs.forEach { (id, o) -> o.tag?.let { putString("c:$id", it.key) } }
+        }.apply(); tagsVersion++
+        var frozen = 0
+        val c = core
+        if (c != null) l.outputs.filter { it.value.spendable != null }.forEach { (id, o) ->
+            val coin = coins.find { it.id == id } ?: return@forEach
+            if (coin.frozen != (o.spendable == false)) {
+                lock.withLock { withContext(Dispatchers.IO) { c.setFrozen(coin.txid, coin.vout, o.spendable == false) } }
+                frozen++
+            }
+        }
+        if (frozen > 0) coins = lock.withLock { withContext(Dispatchers.IO) { c!!.coins() } }
+        prepared = null
+        message = "Štítky načteny ✔\nPoznámky: ${l.notes.size} · značky mincí: ${l.outputs.count { it.value.tag != null }} · značky adres: ${l.addresses.size}" +
+            if (frozen > 0) " · změněno zmrazení: $frozen" else ""
+    }
+
     // ---------- Detail transakce a urychlení (RBF) ----------
     var txDetail by mutableStateOf<TxItem?>(null)
     var bumpPrepared by mutableStateOf<PreparedBump?>(null)
