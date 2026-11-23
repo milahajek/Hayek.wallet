@@ -38,6 +38,16 @@ fun LabelsSection(vm: WalletViewModel) {
     Text("Poznámky k transakcím, značky Bez KYC / KYC a zmrazené mince jsou jen v tomto telefonu – obnovovací slova je neobsahují. " +
         "Zálohujte je do souboru (standard BIP-329, umí ho i Sparrow Wallet).",
         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val last = vm.lastLabelsBackup
+    val status = when {
+        vm.labelChanges > 0 -> "● Od poslední zálohy: ${vm.labelChanges} ${changesWord(vm.labelChanges)}" + if (last == 0L) " (zatím nezálohováno)" else ""
+        last > 0 -> "✔ Zálohováno ${SimpleDateFormat("d. M. yyyy", Locale.forLanguageTag("cs")).format(Date(last))}"
+        else -> null
+    }
+    status?.let {
+        Text(it, fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 6.dp),
+            color = if (vm.labelChanges > 0) HayekOrange else androidx.compose.ui.graphics.Color(0xFF2E9E5B))
+    }
     Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         GlassButton(onClick = { askExport = true }, Modifier.weight(1f), enabled = !vm.busy) {
@@ -122,4 +132,29 @@ private fun PasswordDialog(title: String, text: String, confirm: String, onDismi
         confirmButton = { TextButton(onClick = { onConfirm(pw) }, enabled = pw.isNotEmpty()) { Text(confirm) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Zrušit") } },
     )
+}
+
+fun changesWord(n: Int) = when { n == 1 -> "změna"; n in 2..4 -> "změny"; else -> "změn" }
+
+/** Po obnově ze slov: nabídka načíst zálohu štítků. */
+@Composable
+fun OfferLabelsImportDialog(vm: WalletViewModel) {
+    val openLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.importLabels(uri) else vm.offerLabelsImport = false
+    }
+    if (vm.labelsImportNeedsPassword == null) AlertDialog(
+        onDismissRequest = { vm.offerLabelsImport = false },
+        icon = { Icon(Icons.Default.Download, null) },
+        title = { Text("Peněženka obnovena ✔") },
+        text = {
+            Text("Máte zálohu štítků (poznámky, značky Bez KYC / KYC, zmrazené mince)? Načtěte ji teď. " +
+                "Později to jde i v Nastavení → Štítky a poznámky.", fontSize = 14.sp)
+        },
+        confirmButton = { TextButton(onClick = { openLauncher.launch(arrayOf("*/*")) }) { Text("Načíst zálohu") } },
+        dismissButton = { TextButton(onClick = { vm.offerLabelsImport = false }) { Text("Nemám / teď ne") } },
+    )
+    vm.labelsImportNeedsPassword?.let { uri ->
+        PasswordDialog("Zašifrovaná záloha", "Zadejte heslo, kterým jste zálohu zašifroval.", "Načíst",
+            onDismiss = { vm.labelsImportNeedsPassword = null }, onConfirm = { vm.importLabels(uri, it) })
+    }
 }

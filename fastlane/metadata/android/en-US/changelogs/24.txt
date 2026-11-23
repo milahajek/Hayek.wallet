@@ -1,0 +1,1 @@
+After restoring from words the app offers to import a label backup. An orange dot on Settings and a change count show labels added since the last backup.

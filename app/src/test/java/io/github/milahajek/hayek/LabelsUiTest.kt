@@ -22,18 +22,27 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
 class LabelsUiTest {
-    @Test fun labelsSectionAndDialog() {
+    @Test fun labelsSectionAndDialog() = shot(1, "labels")
+    @Test fun offerAfterRestore() = shot(2, "labels_offer")
+    @Test fun changesBadge() = shot(0, "labels_changes") { vm ->
+        vm.setNote("a".repeat(64), "test"); vm.setAddressTag("bc1qtest", CoinTag.NOKYC); vm.setNote("b".repeat(64), "x")
+    }
+
+    private fun shot(dialog: Int, name: String, prep: (WalletViewModel) -> Unit = {}) {
         val act = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         val vm = ViewModelProvider(act)[WalletViewModel::class.java]
+        prep(vm)
+        if (dialog == 2) vm.offerLabelsImport = true
         act.setContent {
             MaterialTheme(lightColorScheme(primary = Color(0xFFF7931A), background = Color(0xFFFCF8F3), surface = Color(0xFFFFFBF6))) {
                 HayekBackground {
                     Column(Modifier.padding(20.dp)) { LabelsSection(vm) }
-                    ExportLabelsDialog(count = 12, onDismiss = {}, onConfirm = {})
+                    if (dialog == 1) ExportLabelsDialog(count = 12, onDismiss = {}, onConfirm = {})
+                    if (dialog == 2) OfferLabelsImportDialog(vm)
                 }
             }
         }
         repeat(10) { shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200)) }
-        captureScreenRoboImage("build/promo/labels.png")
+        captureScreenRoboImage("build/promo/$name.png")
     }
 }

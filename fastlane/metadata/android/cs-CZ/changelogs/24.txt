@@ -1,0 +1,1 @@
+Po obnově ze slov aplikace nabídne načíst zálohu štítků. Oranžová tečka u Nastavení a počet změn ukazují, že štítky od poslední zálohy přibyly.

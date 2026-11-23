@@ -206,7 +206,11 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                 actions = {
                     if (screen == Screen.Home) {
                         IconButton(onClick = { vm.sync() }, enabled = !vm.busy) { Icon(Icons.Default.Refresh, "Obnovit") }
-                        IconButton(onClick = { vm.screen = Screen.Settings }) { Icon(Icons.Default.Settings, "Nastavení") }
+                        IconButton(onClick = { vm.screen = Screen.Settings }) {
+                            BadgedBox(badge = { if (vm.labelChanges > 0) Badge(containerColor = Orange) }) {
+                                Icon(Icons.Default.Settings, if (vm.labelChanges > 0) "Nastavení – štítky nejsou zálohované" else "Nastavení")
+                            }
+                        }
                     }
                     if (screen == Screen.Welcome) {
                         IconButton(onClick = { vm.screen = Screen.Settings }) { Icon(Icons.Default.Settings, "Nastavení") }
@@ -468,7 +472,7 @@ fun RestoreScreen(vm: WalletViewModel, act: FragmentActivity) {
         )
         Spacer(Modifier.height(16.dp))
         HayekButton(onClick = {
-            vm.checkRestore(text)?.let { w -> act.auth(vm, "Uložit peněženku") { vm.saveAndOpen(w) } }
+            vm.checkRestore(text)?.let { w -> act.auth(vm, "Uložit peněženku") { vm.saveAndOpen(w, restored = true) } }
         }, enabled = text.isNotBlank() && !vm.busy, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Obnovit") }
     }
 }
@@ -538,6 +542,7 @@ fun HomeScreen(vm: WalletViewModel, act: FragmentActivity) {
         }
     }
     vm.txDetail?.let { TxDetailDialog(it, vm, act) }
+    if (vm.offerLabelsImport) OfferLabelsImportDialog(vm)
 }
 
 @Composable

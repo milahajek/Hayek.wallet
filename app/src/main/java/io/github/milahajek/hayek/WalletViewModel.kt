@@ -75,8 +75,9 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         private set
     fun note(txid: String): String = notesPrefs.getString(txid, "").orEmpty()
     fun setNote(txid: String, text: String) {
+        if (note(txid) == text.trim().take(200)) return
         notesPrefs.edit().apply { if (text.isBlank()) remove(txid) else putString(txid, text.trim().take(200)) }.apply()
-        notesVersion++
+        notesVersion++; labelChanged()
     }
 
     // ---------- Značky mincí KYC / bez KYC (jen v telefonu) ----------
@@ -89,11 +90,12 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun addressTag(address: String): CoinTag? { tagsVersion; return CoinTag.of(tagRaw("a:$address")) }
     fun setCoinTag(ids: Collection<String>, tag: CoinTag?) {
         tagPrefs.edit().apply { ids.forEach { putString("c:$it", CoinTag.keyOf(tag)) } }.apply()
-        tagsVersion++; prepared = null
+        tagsVersion++; prepared = null; labelChanged()
     }
     fun setAddressTag(address: String, tag: CoinTag?) {
+        if (addressTag(address) == tag) return
         tagPrefs.edit().apply { if (tag == null) remove("a:$address") else putString("a:$address", tag.key) }.apply()
-        tagsVersion++
+        tagsVersion++; labelChanged()
     }
     /** Ze které skupiny platit, když jsou v peněžence mince s různými značkami (klíč CoinTag nebo „none“). */
     var payFrom by mutableStateOf<String?>(null)
@@ -103,6 +105,14 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun inputTags(p: PreparedTx): List<CoinTag?> = p.inputIds.map { id -> coins.find { it.id == id }?.let { coinTag(it) } }
 
     // ---------- Záloha štítků (BIP-329) ----------
+    /** Po obnově ze slov nabídnout načtení zálohy štítků. */
+    var offerLabelsImport by mutableStateOf(false)
+    /** Počet změn štítků od poslední zálohy (poznámky, značky, zmrazení). */
+    var labelChanges by mutableStateOf(prefs.getInt("label_changes", 0))
+        private set
+    val lastLabelsBackup: Long get() = prefs.getLong("labels_backup_at", 0)
+    private fun labelChanged() { labelChanges++; prefs.edit().putInt("label_changes", labelChanges).apply() }
+
     /** Sestaví zálohu: poznámky, značky adres, značky a zmrazení současných mincí. */
     fun labelsForExport(): Bip329.Labels {
         val notes = notesPrefs.all.mapNotNull { (k, v) -> (v as? String)?.takeIf { it.isNotBlank() }?.let { k to it } }.toMap()
@@ -121,6 +131,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         withContext(Dispatchers.IO) {
             getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) }
         }
+        labelChanges = 0
+        prefs.edit().putInt("label_changes", 0).putLong("labels_backup_at", System.currentTimeMillis()).apply()
         message = "Štítky uloženy ✔\n" + (if (password.isEmpty()) "Soubor není šifrovaný – uložte ho na bezpečné místo." else "Soubor je zašifrovaný heslem. Bez hesla ho nikdo nepřečte.")
     }
 
@@ -135,7 +147,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             if (password == null) { labelsImportNeedsPassword = uri; return@run }
             withContext(Dispatchers.Default) { Bip329.decrypt(data, password) }
         } else String(data)
-        labelsImportNeedsPassword = null
+        labelsImportNeedsPassword = null; offerLabelsImport = false
         val l = Bip329.parse(text)
         require(l.size > 0) { "V souboru nejsou žádné štítky, které by Hayek Wallet znala." }
         notesPrefs.edit().apply { l.notes.forEach { (k, v) -> putString(k, v) } }.apply(); notesVersion++
@@ -186,7 +198,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         val b = bumpPrepared ?: return@run
         val newId = lock.withLock { withContext(Dispatchers.IO) { c.signAndBroadcastBump(b) } }
         note(b.oldTxid).takeIf { it.isNotBlank() }?.let { setNote(newId, it) }
-        tagRaw("t:${b.oldTxid}")?.let { tagPrefs.edit().putString("t:$newId", it).apply(); tagsVersion++ }
+        tagRaw("t:${b.oldTxid}")?.let { tagPrefs.edit().putString("t:$newId", it).apply(); tagsVersion++; labelChanged() }
         bumpPrepared = null; txDetail = null
         message = "Poplatek zvýšen ✔\nNová transakce nahradila původní.\nTXID: $newId"
         syncNow()
@@ -342,12 +354,13 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Volat až po ověření – uloží zašifrovanou frázi a otevře peněženku. */
-    fun saveAndOpen(words: String) = run {
+    fun saveAndOpen(words: String, restored: Boolean = false) = run {
         withContext(Dispatchers.IO) {
             dbFile.delete()
             store.saveSeed(words)
         }
         open(words)
+        if (restored) offerLabelsImport = true
     }
 
     /** Ověří vstup pro sledovací peněženku; vrací tajemství k uložení, nebo null. */
@@ -414,6 +427,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             withContext(Dispatchers.IO) { c.setFrozen(coin.txid, coin.vout, frozen) }
             coins = withContext(Dispatchers.IO) { c.coins() }
         }
+        labelChanged()
         if (frozen) selected = selected - coin.id
         prepared = null
     }
@@ -453,7 +467,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         try {
             val txid = lock.withLock { withContext(Dispatchers.IO) { c.signAndBroadcast(p) } }
             // Drobné zdědí značku použitých mincí.
-            combineTags(inputTags(p))?.let { tagPrefs.edit().putString("t:$txid", it.key).apply(); tagsVersion++ }
+            combineTags(inputTags(p))?.let { tagPrefs.edit().putString("t:$txid", it.key).apply(); tagsVersion++; labelChanged() }
             selected = emptySet()
             screen = Screen.Home
             message = "Odesláno ✔\nTXID: $txid"
@@ -518,7 +532,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         store.wipe()
         notesPrefs.edit().clear().apply(); notesVersion++
         tagPrefs.edit().clear().apply(); tagsVersion++; payFrom = null
-        prefs.edit().remove("ln_limit").remove("hide_balance").apply()
+        labelChanges = 0; offerLabelsImport = false
+        prefs.edit().remove("ln_limit").remove("hide_balance").remove("label_changes").remove("labels_backup_at").apply()
         dbFile.delete()
         File(dbFile.path + "-wal").delete(); File(dbFile.path + "-shm").delete()
         core = null
