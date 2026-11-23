@@ -175,6 +175,10 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                             .clickable(enabled = screen !is Screen.Intro, onClickLabel = "O aplikaci") { vm.screen = Screen.Intro(screen) }
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
+                      Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(painterResource(R.drawable.ic_logo), "Logo Hayek Wallet", Modifier.size(30.dp))
+                        Spacer(Modifier.width(8.dp))
+                      Column {
                         Text(buildAnnotatedString {
                             withStyle(SpanStyle(color = Orange, fontWeight = FontWeight.ExtraBold)) { append("Hayek") }
                             withStyle(SpanStyle(fontWeight = FontWeight.Light)) { append(" Wallet") }
@@ -187,6 +191,8 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                         Text(sub, fontSize = 12.sp, color = when (vm.connected) {
                             true -> Color(0xFF2E9E4F); false -> MaterialTheme.colorScheme.error; null -> Orange
                         })
+                      }
+                      }
                     }
                 },
                 navigationIcon = {

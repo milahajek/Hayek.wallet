@@ -1,5 +1,6 @@
 package io.github.milahajek.hayek
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
@@ -17,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -80,6 +82,10 @@ fun IntroScreen(vm: WalletViewModel, back: Screen) {
     val scope = rememberCoroutineScope()
     val last = pager.currentPage == pages.lastIndex
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+        Image(
+            painterResource(R.drawable.ic_logo), "Logo Hayek Wallet",
+            Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp, bottom = 4.dp).size(56.dp)
+        )
         HorizontalPager(pager, Modifier.weight(1f)) { i ->
             val p = pages[i]
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
