@@ -173,19 +173,21 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                     Column(
                         Modifier.clip(RoundedCornerShape(12.dp))
                             .clickable(enabled = screen !is Screen.Intro, onClickLabel = "O aplikaci") { vm.screen = Screen.Intro(screen) }
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                      Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Kde je velké logo uprostřed obrazovky (průvodce, úvod, zámek), malé v liště nedáváme.
-                        if (screen !is Screen.Intro && screen != Screen.Welcome && screen != Screen.Locked) {
-                            Image(painterResource(R.drawable.ic_logo), "Logo Hayek Wallet", Modifier.size(30.dp))
-                            Spacer(Modifier.width(8.dp))
+                        // Logo a název v jedné rovině, stav připojení vycentrovaný pod nimi.
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Kde je velké logo uprostřed obrazovky (průvodce, úvod, zámek), malé v liště nedáváme.
+                            if (screen !is Screen.Intro && screen != Screen.Welcome && screen != Screen.Locked) {
+                                Image(painterResource(R.drawable.ic_logo), "Logo Hayek Wallet", Modifier.size(24.dp))
+                                Spacer(Modifier.width(7.dp))
+                            }
+                            Text(buildAnnotatedString {
+                                withStyle(SpanStyle(color = Orange, fontWeight = FontWeight.ExtraBold)) { append("Hayek") }
+                                withStyle(SpanStyle(fontWeight = FontWeight.Light)) { append(" Wallet") }
+                            })
                         }
-                      Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(buildAnnotatedString {
-                            withStyle(SpanStyle(color = Orange, fontWeight = FontWeight.ExtraBold)) { append("Hayek") }
-                            withStyle(SpanStyle(fontWeight = FontWeight.Light)) { append(" Wallet") }
-                        })
                         val sub = when (vm.connected) {
                             true -> "● připojeno k vašemu uzlu"
                             false -> "● uzel nedostupný"
@@ -194,8 +196,6 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                         Text(sub, fontSize = 12.sp, color = when (vm.connected) {
                             true -> Color(0xFF2E9E4F); false -> MaterialTheme.colorScheme.error; null -> Orange
                         })
-                      }
-                      }
                     }
                 },
                 navigationIcon = {
