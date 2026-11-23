@@ -43,7 +43,7 @@ class PromoTest {
 
     private fun base(vm: WalletViewModel) {
         vm.setThemeMode(0); vm.setServer("ssl://10.0.0.1:50002"); vm.connected = true; vm.state = state
-        vm.coins = listOf(CoinItem(h(2), 0, 1_000_000, "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", true, 925_890, false), CoinItem(h(4), 1, 250_000, "bc1qp59yckz4ae5c4efgw2s5wfyvrz0ala7rgvuz8z", true, 925_330, false), CoinItem(h(8), 0, 1_547_009, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", true, 923_700, false))
+        vm.coins = listOf(CoinItem(h(2), 0, 1_000_000, "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", true, 925_890, false), CoinItem(h(4), 1, 250_000, "bc1qp59yckz4ae5c4efgw2s5wfyvrz0ala7rgvuz8z", true, 925_330, false), CoinItem(h(6), 0, 75_000, "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", true, 924_600, false), CoinItem(h(8), 0, 1_547_009, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", true, 923_700, false))
         vm.setNote(h(1), "Nájem – listopad"); vm.setNote(h(2), "Výplata – úspory")
         vm.setNote(h(3), "Bisq – kauce za obchod"); vm.setNote(h(4), "Bisq – nákup za CZK"); vm.setNote(h(6), "Bisq – vrácená kauce"); vm.setNote(h(7), "Bisq – prodej za EUR"); vm.setNote(h(5), "Otevření kanálu ACINQ")
         vm.setNote(h(8), "Bisq – nákup BTC (DCA)")
@@ -82,6 +82,7 @@ class PromoTest {
     @Test fun p6_coins() = shoot("p6_coins") { base(it); tags(it); it.selected = setOf("${h(4)}:1", "${h(2)}:0"); it.screen = Screen.Coins }
     @Test fun p7_send_from() = shoot("p7_send_from") { base(it); tags(it); it.feeEstimates = FeeEstimates(14, 6, 2); it.screen = Screen.Send; it.payFrom = "nokyc" }
     @Test fun p8_receive() = shoot("p8_receive") { base(it); tags(it); it.setAddressTag(it.state!!.address, CoinTag.NOKYC); it.screen = Screen.Receive }
+    @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
     @Test fun p9_home_tags() = shoot("p9_home_tags") { base(it); tags(it); it.screen = Screen.Home }
     @Test fun p4_send() = shoot("p4_send") { base(it); it.feeEstimates = FeeEstimates(14, 6, 2); it.chooseFee(FeeChoice.NORMAL); it.screen = Screen.Send }
 }

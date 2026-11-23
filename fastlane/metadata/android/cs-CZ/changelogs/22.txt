@@ -1,0 +1,1 @@
+Značku původu (Bez KYC / KYC) lze nastavit přímo u transakce na hlavní obrazovce; nová neoznačená platba nabídne „Označit původ“.

@@ -1,0 +1,1 @@
+Coin origin tag (No-KYC / KYC) can be set right on the transaction in the home list; a new untagged payment offers "Tag origin".

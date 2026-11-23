@@ -558,6 +558,7 @@ fun TxRow(tx: TxItem, vm: WalletViewModel, onClick: () -> Unit) {
             Column {
                 if (note.isNotBlank()) Text(note, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                 Text(if (tx.confirmed) "Potvrzeno${date?.let { " · $it" } ?: ""}" else "Čeká na potvrzení" + if (tx.canBump) " · lze urychlit" else "", fontSize = 13.sp)
+                TxTagChip(vm, tx.txid, incoming)
             }
         },
         trailingContent = { Text(tx.txid.take(8) + "…", fontFamily = FontFamily.Monospace, fontSize = 12.sp) }

@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.sp
 
 /** Barevný štítek skupiny (Bez KYC / KYC / Neoznačené). */
 @Composable
-fun TagPill(key: String, text: String = CoinTag.labelOf(key), selected: Boolean = true, onClick: (() -> Unit)? = null) {
+fun TagPill(key: String, text: String = CoinTag.labelOf(key), selected: Boolean = true, compact: Boolean = false, onClick: (() -> Unit)? = null) {
     val c = CoinTag.colorOf(key)
     val shape = RoundedCornerShape(50)
     Row(
@@ -29,13 +29,13 @@ fun TagPill(key: String, text: String = CoinTag.labelOf(key), selected: Boolean 
             .background(if (selected) c.copy(alpha = 0.16f) else Color.Transparent)
             .border(1.dp, if (selected) c else MaterialTheme.colorScheme.outlineVariant, shape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 10.dp, vertical = if (onClick != null) 8.dp else 3.dp),
+            .padding(horizontal = 10.dp, vertical = if (onClick != null && !compact) 8.dp else if (compact) 4.dp else 3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (selected && onClick != null) Icon(Icons.Default.Check, null, Modifier.size(16.dp), tint = c)
+        if (selected && onClick != null && !compact) Icon(Icons.Default.Check, null, Modifier.size(16.dp), tint = c)
         else Box(Modifier.size(8.dp).clip(CircleShape).background(c))
         Spacer(Modifier.width(6.dp))
-        Text(text, fontSize = if (onClick != null) 14.sp else 12.sp, fontWeight = FontWeight.Medium,
+        Text(text, fontSize = if (onClick != null && !compact) 14.sp else 12.sp, fontWeight = FontWeight.Medium,
             color = if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -141,6 +141,36 @@ fun MixWarning(tags: List<CoinTag?>, ack: Boolean, onAck: (Boolean) -> Unit) {
         Row(Modifier.clickable { onAck(!ack) }, verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = ack, onCheckedChange = onAck)
             Text("Rozumím, přesto je chci použít společně", fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+        }
+    }
+}
+
+/**
+ * Štítek u transakce na hlavní obrazovce: ukazuje a mění značku nevyužitých mincí z této transakce.
+ * U nové neoznačené platby nabídne „Označit původ“.
+ */
+@Composable
+fun TxTagChip(vm: WalletViewModel, txid: String, incoming: Boolean) {
+    @Suppress("UNUSED_VARIABLE") val v = vm.tagsVersion
+    val own = vm.coins.filter { it.txid == txid }
+    if (own.isEmpty()) return
+    val tags = own.map { vm.coinTag(it) }.distinct()
+    val tag = tags.singleOrNull()
+    if (tag == null && !incoming) return   // drobné bez značky nemá smysl zvýrazňovat
+    var open by remember { mutableStateOf(false) }
+    Box(Modifier.padding(top = 4.dp)) {
+        when {
+            tags.size > 1 -> TagPill(CoinTag.NONE, "Různé značky ▾", selected = false, compact = true) { open = true }
+            tag == null -> TagPill(CoinTag.NONE, "Označit původ ▾", selected = false, compact = true) { open = true }
+            else -> TagPill(tag.key, "${tag.label} ▾", compact = true) { open = true }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            (CoinTag.entries.map { it as CoinTag? } + null).forEach { t ->
+                DropdownMenuItem(
+                    text = { TagPill(CoinTag.keyOf(t), if (t == null) "Neoznačeno" else t.label, selected = tags.size == 1 && t == tag) },
+                    onClick = { open = false; vm.setCoinTag(own.map { it.id }, t) },
+                )
+            }
         }
     }
 }
