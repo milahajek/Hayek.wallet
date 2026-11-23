@@ -208,3 +208,34 @@ fun TxTagChip(vm: WalletViewModel, txid: String, incoming: Boolean) {
         }
     }
 }
+
+/** Štítek „⚠ prach“ u podezřelé drobné mince. */
+@Composable
+fun DustPill(frozen: Boolean = true) {
+    val c = HayekOrange
+    Row(
+        Modifier.clip(RoundedCornerShape(50)).background(c.copy(alpha = 0.14f)).border(1.dp, c, RoundedCornerShape(50))
+            .padding(horizontal = 10.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) { Text(if (frozen) "⚠ prach – zmrazeno" else "⚠ prach", fontSize = 12.sp, fontWeight = FontWeight.Medium) }
+}
+
+/** Nastavení ochrany proti prachu. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun DustSection(vm: WalletViewModel) {
+    Text("Ochrana proti prachu", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    Text("Útočníci posílají na cizí adresy drobné částky („dust attack“). Kdo by je utratil s ostatními mincemi, prozradí, že patří jednomu majiteli. " +
+        "Příchozí mince pod zvolenou hranicí se proto samy zmrazí. Vlastní drobné z plateb se to netýká.",
+        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(Modifier.height(8.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Dust.CHOICES.forEach { v ->
+            FilterChip(
+                selected = vm.dustThreshold == v, onClick = { vm.saveDustThreshold(v) },
+                label = { Text(if (v == 0L) "Vypnuto" else "pod ${formatSat(v)}") },
+                leadingIcon = if (vm.dustThreshold == v) { { Icon(Icons.Default.Check, null, Modifier.size(18.dp)) } } else null,
+            )
+        }
+    }
+}

@@ -563,7 +563,8 @@ fun TxRow(tx: TxItem, vm: WalletViewModel, onClick: () -> Unit) {
             Column {
                 if (note.isNotBlank()) Text(note, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                 Text(if (tx.confirmed) "Potvrzeno${date?.let { " · $it" } ?: ""}" else "Čeká na potvrzení" + if (tx.canBump) " · lze urychlit" else "", fontSize = 13.sp)
-                TxTagChip(vm, tx.txid, incoming)
+                if (vm.txHasDust(tx.txid)) Box(Modifier.padding(top = 4.dp)) { DustPill(vm.coins.any { it.txid == tx.txid && it.frozen }) }
+                else TxTagChip(vm, tx.txid, incoming)
             }
         },
         trailingContent = { Text(tx.txid.take(8) + "…", fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
@@ -881,6 +882,8 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
             HorizontalDivider(Modifier.padding(vertical = 20.dp))
             LabelsSection(vm)
             HorizontalDivider(Modifier.padding(vertical = 20.dp))
+            DustSection(vm)
+            HorizontalDivider(Modifier.padding(vertical = 20.dp))
             Text("Bezpečnost", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             if (!vm.watchOnly) GlassButton(onClick = { vm.screen = Screen.Seed }, Modifier.fillMaxWidth()) { Text("Zobrazit obnovovací frázi") }
@@ -1049,7 +1052,10 @@ fun CoinsScreen(vm: WalletViewModel) {
                                 (if (c.confirmed) "Potvrzeno v bloku ${c.height}" else "Čeká na potvrzení") + (if (c.change) " · drobné" else "") + if (c.frozen) " · ZMRAZENO" else "",
                                 fontSize = 12.sp, color = if (c.frozen) Color(0xFF3B8ED6) else MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            if (tag != null) Box(Modifier.padding(top = 4.dp)) { TagPill(tag.key) }
+                            if (tag != null || vm.isDust(c)) Row(Modifier.padding(top = 4.dp)) {
+                                tag?.let { TagPill(it.key); Spacer(Modifier.width(6.dp)) }
+                                if (vm.isDust(c)) DustPill(c.frozen)
+                            }
                         }
                     },
                     trailingContent = {

@@ -1,0 +1,1 @@
+Dust attack protection: small incoming coins below a chosen threshold (default 1,000 sat) are frozen and flagged automatically; configurable in Settings.

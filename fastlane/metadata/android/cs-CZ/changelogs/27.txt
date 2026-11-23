@@ -1,0 +1,1 @@
+Ochrana proti „dust attacku“: drobné příchozí mince pod zvolenou hranicí (výchozí 1 000 sat) se samy zmrazí a označí; nastavení v Nastavení → Ochrana proti prachu.

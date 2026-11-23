@@ -23,6 +23,7 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
 class LabelsUiTest {
     @Test fun labelsSectionAndDialog() = shot(1, "labels")
+    @Test fun dustSection() = shot(3, "dust")
     @Test fun offerAfterRestore() = shot(2, "labels_offer")
     @Test fun changesBadge() = shot(0, "labels_changes") { vm ->
         vm.setNote("a".repeat(64), "test"); vm.setAddressTag("bc1qtest", CoinTag.NOKYC); vm.setNote("b".repeat(64), "x")
@@ -36,7 +37,9 @@ class LabelsUiTest {
         act.setContent {
             MaterialTheme(lightColorScheme(primary = Color(0xFFF7931A), background = Color(0xFFFCF8F3), surface = Color(0xFFFFFBF6))) {
                 HayekBackground {
-                    Column(Modifier.padding(20.dp)) { LabelsSection(vm) }
+                    Column(Modifier.padding(20.dp)) {
+                        if (dialog == 3) { DustSection(vm); Spacer(Modifier.height(16.dp)); DustPill() } else LabelsSection(vm)
+                    }
                     if (dialog == 1) ExportLabelsDialog(count = 12, onDismiss = {}, onConfirm = {})
                     if (dialog == 2) OfferLabelsImportDialog(vm)
                 }

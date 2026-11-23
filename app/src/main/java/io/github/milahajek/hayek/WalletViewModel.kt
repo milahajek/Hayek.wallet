@@ -104,6 +104,33 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         coins.filter { !it.frozen }.groupBy { coinTagKey(it) }.mapValues { (_, v) -> v.sumOf { it.valueSat } }
     fun inputTags(p: PreparedTx): List<CoinTag?> = p.inputIds.map { id -> coins.find { it.id == id }?.let { coinTag(it) } }
 
+    // ---------- Ochrana proti prachu (dust attack) ----------
+    var dustThreshold by mutableStateOf(prefs.getLong("dust_threshold", Dust.DEFAULT_THRESHOLD))
+        private set
+    fun saveDustThreshold(v: Long) { dustThreshold = v; prefs.edit().putLong("dust_threshold", v).apply() }
+    private var dustIds by mutableStateOf(prefs.getStringSet("dust_ids", emptySet())!!.toSet())
+    fun isDust(c: CoinItem) = c.id in dustIds
+    fun txHasDust(txid: String) = coins.any { it.txid == txid && it.id in dustIds }
+
+    /** Volat uvnitř zámku po načtení mincí. Novou podezřelou minci jednou zmrazí; ručně rozmrazenou už nechá být. */
+    private suspend fun guardDust(c: WalletCore) {
+        val seen = prefs.getStringSet("dust_seen", emptySet())!!.toSet()
+        val found = Dust.findNew(coins, dustThreshold, seen)
+        if (found.isEmpty()) return
+        val toFreeze = found.filter { !it.frozen }
+        withContext(Dispatchers.IO) { toFreeze.forEach { c.setFrozen(it.txid, it.vout, true) } }
+        dustIds = dustIds + found.map { it.id }
+        prefs.edit().putStringSet("dust_seen", seen + found.map { it.id }).putStringSet("dust_ids", dustIds).apply()
+        if (toFreeze.isNotEmpty()) {
+            coins = withContext(Dispatchers.IO) { c.coins() }
+            labelChanged()
+            message = (if (toFreeze.size == 1) "Přišla podezřelá drobná platba ${formatSat(toFreeze[0].valueSat)}."
+                else "Přišlo ${toFreeze.size} podezřelých drobných plateb (celkem ${formatSat(toFreeze.sumOf { it.valueSat })}).") +
+                "\n\nZmrazil jsem ji, aby se při placení nepropojila s vašimi ostatními mincemi (ochrana proti „dust attacku“). " +
+                "Pokud jde o platbu, kterou čekáte, rozmrazíte ji v Mincích (❄)."
+        }
+    }
+
     // ---------- Záloha štítků (BIP-329) ----------
     /** Po obnově ze slov nabídnout načtení zálohy štítků. */
     var offerLabelsImport by mutableStateOf(false)
@@ -389,6 +416,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.IO) { c.sync() }
                 state = withContext(Dispatchers.IO) { c.state() }
                 coins = withContext(Dispatchers.IO) { c.coins() }
+                guardDust(c)
                 selected = selected.filter { id -> coins.any { it.id == id && !it.frozen } }.toSet()
             }
             connected = true
@@ -532,8 +560,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         store.wipe()
         notesPrefs.edit().clear().apply(); notesVersion++
         tagPrefs.edit().clear().apply(); tagsVersion++; payFrom = null
-        labelChanges = 0; offerLabelsImport = false
-        prefs.edit().remove("ln_limit").remove("hide_balance").remove("label_changes").remove("labels_backup_at").apply()
+        labelChanges = 0; offerLabelsImport = false; dustIds = emptySet()
+        prefs.edit().remove("ln_limit").remove("hide_balance").remove("label_changes").remove("labels_backup_at").remove("dust_seen").remove("dust_ids").apply()
         dbFile.delete()
         File(dbFile.path + "-wal").delete(); File(dbFile.path + "-shm").delete()
         core = null
