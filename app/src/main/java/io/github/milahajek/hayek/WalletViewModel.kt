@@ -79,6 +79,29 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         notesVersion++
     }
 
+    // ---------- Značky mincí KYC / bez KYC (jen v telefonu) ----------
+    private val tagPrefs = app.getSharedPreferences("coin_tags", Context.MODE_PRIVATE)
+    var tagsVersion by mutableStateOf(0)
+        private set
+    private fun tagRaw(k: String): String? = tagPrefs.getString(k, null)
+    fun coinTag(c: CoinItem): CoinTag? { tagsVersion; return resolveTag(c, ::tagRaw) }
+    fun coinTagKey(c: CoinItem): String = CoinTag.keyOf(coinTag(c))
+    fun addressTag(address: String): CoinTag? { tagsVersion; return CoinTag.of(tagRaw("a:$address")) }
+    fun setCoinTag(ids: Collection<String>, tag: CoinTag?) {
+        tagPrefs.edit().apply { ids.forEach { putString("c:$it", CoinTag.keyOf(tag)) } }.apply()
+        tagsVersion++; prepared = null
+    }
+    fun setAddressTag(address: String, tag: CoinTag?) {
+        tagPrefs.edit().apply { if (tag == null) remove("a:$address") else putString("a:$address", tag.key) }.apply()
+        tagsVersion++
+    }
+    /** Ze které skupiny platit, když jsou v peněžence mince s různými značkami (klíč CoinTag nebo „none“). */
+    var payFrom by mutableStateOf<String?>(null)
+    /** Skupiny nezmrazených mincí: klíč → součet. */
+    fun spendableGroups(): Map<String, Long> =
+        coins.filter { !it.frozen }.groupBy { coinTagKey(it) }.mapValues { (_, v) -> v.sumOf { it.valueSat } }
+    fun inputTags(p: PreparedTx): List<CoinTag?> = p.inputIds.map { id -> coins.find { it.id == id }?.let { coinTag(it) } }
+
     // ---------- Detail transakce a urychlení (RBF) ----------
     var txDetail by mutableStateOf<TxItem?>(null)
     var bumpPrepared by mutableStateOf<PreparedBump?>(null)
@@ -107,6 +130,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         val b = bumpPrepared ?: return@run
         val newId = lock.withLock { withContext(Dispatchers.IO) { c.signAndBroadcastBump(b) } }
         note(b.oldTxid).takeIf { it.isNotBlank() }?.let { setNote(newId, it) }
+        tagRaw("t:${b.oldTxid}")?.let { tagPrefs.edit().putString("t:$newId", it).apply(); tagsVersion++ }
         bumpPrepared = null; txDetail = null
         message = "Poplatek zvýšen ✔\nNová transakce nahradila původní.\nTXID: $newId"
         syncNow()
@@ -340,6 +364,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     fun openSend() {
         prepared = null
+        payFrom = null
         screen = Screen.Send
         val c = core ?: return
         viewModelScope.launch {
@@ -356,7 +381,13 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             ?: throw IllegalArgumentException("Zadejte částku v satoshi (celé číslo).")
         val rate = feeRate.trim().toLongOrNull()
             ?: throw IllegalArgumentException("Zadejte poplatek v sat/vB.")
-        prepared = lock.withLock { withContext(Dispatchers.IO) { c.prepare(to, sats, rate, sendAll, selected) } }
+        val groups = spendableGroups()
+        val avoid = if (selected.isEmpty() && groups.size > 1) {
+            val from = payFrom?.takeIf { it in groups }
+                ?: throw IllegalArgumentException("V peněžence máte mince s různými značkami. Vyberte nahoře, ze kterých chcete platit (např. jen Bez KYC).")
+            coins.filter { !it.frozen && coinTagKey(it) != from }.map { it.id }.toSet()
+        } else emptySet()
+        prepared = lock.withLock { withContext(Dispatchers.IO) { c.prepare(to, sats, rate, sendAll, selected, avoid) } }
     }
 
     /** Volat až po ověření. */
@@ -365,6 +396,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         val p = prepared ?: return@run
         try {
             val txid = lock.withLock { withContext(Dispatchers.IO) { c.signAndBroadcast(p) } }
+            // Drobné zdědí značku použitých mincí.
+            combineTags(inputTags(p))?.let { tagPrefs.edit().putString("t:$txid", it.key).apply(); tagsVersion++ }
             selected = emptySet()
             screen = Screen.Home
             message = "Odesláno ✔\nTXID: $txid"
@@ -428,6 +461,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         lnClear()
         store.wipe()
         notesPrefs.edit().clear().apply(); notesVersion++
+        tagPrefs.edit().clear().apply(); tagsVersion++; payFrom = null
         prefs.edit().remove("ln_limit").remove("hide_balance").apply()
         dbFile.delete()
         File(dbFile.path + "-wal").delete(); File(dbFile.path + "-shm").delete()

@@ -1,0 +1,1 @@
+Coin tags No-KYC / KYC: colour labels, balance split, tagged receive addresses, spending from one group only and a warning before mixing. Change inherits the tag.

@@ -76,5 +76,12 @@ class PromoTest {
     @Test fun p5_pay() = shoot("p5_pay") { base(it)
         it.lnDecoded = LnDecoded("lnbc42u1p4sxfugpp5tw9k9s4ed0zhen3njkse77d8lc0zmj4k2rqkla8unfzfrf0zg00qdqsw3jhxapqd0p6zanpcqzzsxqrrsssp5hn3lruytv9eesuawuwgpfz09wvnndpl2zumzkjn8mzcnpc4smqtq9qxpqysgq7de3qwfpnvjgyyv4v6kge6jcx4ef92j02lgwg8gml2yg80wngl6sdftq328uu0nhm8t96qk5vd37s06lr5w6xxsn374fwufuuuw6zrcpmyr9r0", 4_200, "Káva u Hayeka", "03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f", "ab", System.currentTimeMillis() / 1000, 3600)
         it.screen = Screen.LnPay }
+    private fun tags(vm: WalletViewModel) {
+        vm.setCoinTag(listOf("${h(4)}:1", "${h(8)}:0"), CoinTag.NOKYC); vm.setCoinTag(listOf("${h(2)}:0"), CoinTag.KYC)
+    }
+    @Test fun p6_coins() = shoot("p6_coins") { base(it); tags(it); it.selected = setOf("${h(4)}:1", "${h(2)}:0"); it.screen = Screen.Coins }
+    @Test fun p7_send_from() = shoot("p7_send_from") { base(it); tags(it); it.feeEstimates = FeeEstimates(14, 6, 2); it.screen = Screen.Send; it.payFrom = "nokyc" }
+    @Test fun p8_receive() = shoot("p8_receive") { base(it); tags(it); it.setAddressTag(it.state!!.address, CoinTag.NOKYC); it.screen = Screen.Receive }
+    @Test fun p9_home_tags() = shoot("p9_home_tags") { base(it); tags(it); it.screen = Screen.Home }
     @Test fun p4_send() = shoot("p4_send") { base(it); it.feeEstimates = FeeEstimates(14, 6, 2); it.chooseFee(FeeChoice.NORMAL); it.screen = Screen.Send }
 }

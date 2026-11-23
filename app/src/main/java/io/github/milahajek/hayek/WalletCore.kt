@@ -90,7 +90,11 @@ data class WalletState(
     val txs: List<TxItem>,
 )
 
-data class PreparedTx(val psbt: Psbt, val amountSat: Long, val feeSat: Long, val to: String, val feeRate: Long, val inputs: Int)
+data class PreparedTx(
+    val psbt: Psbt, val amountSat: Long, val feeSat: Long, val to: String, val feeRate: Long, val inputs: Int,
+    /** Použité mince (txid:vout) – pro značky KYC / bez KYC. */
+    val inputIds: List<String> = emptyList(),
+)
 
 data class CoinItem(
     val txid: String,
@@ -100,6 +104,8 @@ data class CoinItem(
     val confirmed: Boolean,
     val height: Int?,
     val frozen: Boolean,
+    /** Drobné (vrácené zpět do peněženky z vlastní platby). */
+    val change: Boolean = false,
 ) {
     val id get() = "$txid:$vout"
 }
@@ -322,6 +328,7 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
             confirmed = pos is ChainPosition.Confirmed,
             height = (pos as? ChainPosition.Confirmed)?.confirmationBlockTime?.blockId?.height?.toInt(),
             frozen = wallet.isOutpointLocked(u.outpoint),
+            change = u.keychain == KeychainKind.INTERNAL,
         )
     }.sortedByDescending { it.valueSat }
 
@@ -372,8 +379,9 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
 
     /**
      * @param selected vybrané mince (txid:vout). Prázdné = automatický výběr (bez zmrazených mincí).
+     * @param avoid mince, které automatický výběr nesmí použít (jiná skupina KYC / bez KYC).
      */
-    fun prepare(to: String, amountSat: Long, feeRateSatVb: Long, sendAll: Boolean, selected: Set<String> = emptySet()): PreparedTx {
+    fun prepare(to: String, amountSat: Long, feeRateSatVb: Long, sendAll: Boolean, selected: Set<String> = emptySet(), avoid: Set<String> = emptySet()): PreparedTx {
         check(!watchOnly) { "Sledovací peněženka nemůže odesílat." }
         val address = try {
             Address(to.trim(), NETWORK)
@@ -382,15 +390,17 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
         }
         require(feeRateSatVb in 1..500) { "Poplatek musí být 1–500 sat/vB" }
         var builder = TxBuilder().feeRate(FeeRate.fromSatPerVb(feeRateSatVb.toULong()))
-        val available = coins().filter { !it.frozen }
+        val available = coins().filter { !it.frozen && (selected.isNotEmpty() || it.id !in avoid) }
         val chosen = if (selected.isNotEmpty()) available.filter { it.id in selected } else emptyList()
         require(selected.isEmpty() || chosen.size == selected.size) { "Některá vybraná mince už není k dispozici nebo je zmrazená." }
         if (chosen.isNotEmpty()) {
             builder = builder.addUtxos(chosen.map { OutPoint(Txid.fromString(it.txid), it.vout.toUInt()) }).manuallySelectedOnly()
+        } else if (avoid.isNotEmpty()) {
+            builder = builder.unspendable(avoid.map { id -> OutPoint(Txid.fromString(id.substringBefore(':')), id.substringAfter(':').toUInt()) })
         }
         builder = if (sendAll) {
             val spend = chosen.ifEmpty { available }
-            require(spend.isNotEmpty()) { "Nemáte žádné nezmrazené mince." }
+            require(spend.isNotEmpty()) { if (avoid.isNotEmpty()) "Ve zvolené skupině nejsou žádné mince." else "Nemáte žádné nezmrazené mince." }
             if (chosen.isEmpty()) builder = builder.addUtxos(spend.map { OutPoint(Txid.fromString(it.txid), it.vout.toUInt()) }).manuallySelectedOnly()
             builder.drainTo(address.scriptPubkey())
         } else {
@@ -404,7 +414,8 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
         val amount = tx.output()
             .filter { it.scriptPubkey.toBytes().contentEquals(target) }
             .sumOf { it.value.toSat().toLong() }
-        return PreparedTx(psbt, amount, fee, to.trim(), feeRateSatVb, tx.input().size)
+        val inputIds = tx.input().map { "${it.previousOutput.txid}:${it.previousOutput.vout}" }
+        return PreparedTx(psbt, amount, fee, to.trim(), feeRateSatVb, tx.input().size, inputIds)
     }
 
     fun signAndBroadcast(p: PreparedTx): String {

@@ -504,6 +504,7 @@ fun HomeScreen(vm: WalletViewModel, act: FragmentActivity) {
                     if ((st?.pendingSat ?: 0) > 0 && !vm.hideBalance) {
                         Text("z toho čeká na potvrzení: ${formatSat(st!!.pendingSat)}", color = Orange, fontSize = 13.sp)
                     }
+                    TagBalances(vm)
                 }
                 IconButton(onClick = { vm.toggleHideBalance() }, Modifier.align(Alignment.TopEnd).padding(4.dp)) {
                     Icon(if (vm.hideBalance) Icons.Default.VisibilityOff else Icons.Default.Visibility,
@@ -594,6 +595,7 @@ fun ReceiveScreen(vm: WalletViewModel) {
         TextButton(onClick = { vm.newAddress() }, enabled = !vm.busy) { Text("Vygenerovat novou adresu") }
         Text("Pro každou platbu je lepší nová adresa (soukromí). Staré adresy ale fungují dál.",
             fontSize = 13.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ReceiveTagPicker(vm, addr)
     }
 }
 
@@ -673,6 +675,7 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
                 Text("Vybrat", color = Orange)
             }
         }
+        PayFromPicker(vm)
         Spacer(Modifier.height(8.dp))
         FeePicker(
             estimates = vm.feeEstimates, choice = vm.feeChoice, rate = vm.feeRate,
@@ -685,6 +688,9 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
                 enabled = to.isNotBlank() && (all || amount.isNotBlank()) && !vm.busy,
                 modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Pokračovat") }
         } else {
+            @Suppress("UNUSED_VARIABLE") val tv = vm.tagsVersion
+            val inputTags = remember(p, vm.tagsVersion) { vm.inputTags(p) }
+            var mixAck by remember(p) { mutableStateOf(false) }
             GlassCard(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Zkontrolujte platbu – nejde vrátit!", fontWeight = FontWeight.Bold)
@@ -694,13 +700,14 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
                     Text("Částka: ${formatSat(p.amountSat)}")
                     Text("Poplatek: ${formatSat(p.feeSat)} (${p.feeRate} sat/vB)")
                     Text("Použité mince: ${p.inputs}")
+                    MixWarning(inputTags, mixAck) { mixAck = it }
                     Text("Celkem: ${formatSat(p.amountSat + p.feeSat)}", fontWeight = FontWeight.Bold)
                     if (p.feeSat > p.amountSat / 10) Text("⚠ Poplatek je přes 10 % částky.", color = MaterialTheme.colorScheme.error)
                 }
             }
             Spacer(Modifier.height(12.dp))
             HayekButton(onClick = { act.auth(vm, "Potvrdit platbu ${formatSat(p.amountSat)}", strong = true) { vm.broadcast() } },
-                enabled = !vm.busy, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                enabled = !vm.busy && (!mixesNoKyc(inputTags) || mixAck), modifier = Modifier.fillMaxWidth().height(52.dp)) {
                 Icon(Icons.Default.Fingerprint, null); Spacer(Modifier.width(6.dp)); Text("Podepsat a odeslat")
             }
             TextButton(onClick = { vm.prepared = null }, Modifier.fillMaxWidth()) { Text("Zrušit") }
@@ -1006,14 +1013,17 @@ fun CoinsScreen(vm: WalletViewModel) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             Text("Mince (UTXO)", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Text(
-                if (vm.watchOnly) "Přehled nevyužitých výstupů. ❄ = zmrazená mince."
-                else "Zaškrtněte mince, které se mají v příští platbě utratit. ❄ zmrazí minci – nikdy se nepoužije, dokud ji nerozmrazíte.",
+                (if (vm.watchOnly) "Přehled nevyužitých výstupů. ❄ = zmrazená mince."
+                else "Zaškrtněte mince, které se mají v příští platbě utratit. ❄ zmrazí minci – nikdy se nepoužije, dokud ji nerozmrazíte.") +
+                    " Štítkem označíte původ mince (Bez KYC / KYC), aby se omylem nesmíchaly.",
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         if (vm.coins.isEmpty()) Text("Žádné mince.", Modifier.padding(16.dp))
+        @Suppress("UNUSED_VARIABLE") val tv = vm.tagsVersion
         LazyColumn(Modifier.weight(1f)) {
             items(vm.coins, key = { it.id }) { c ->
+                val tag = vm.coinTag(c)
                 ListItem(
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     modifier = Modifier.clickable(enabled = !vm.watchOnly && !c.frozen) { vm.toggleSelect(c.id) },
@@ -1028,13 +1038,15 @@ fun CoinsScreen(vm: WalletViewModel) {
                         Column {
                             Text(c.address.take(14) + "…" + c.address.takeLast(6), fontFamily = FontFamily.Monospace, fontSize = 12.sp)
                             Text(
-                                (if (c.confirmed) "Potvrzeno v bloku ${c.height}" else "Čeká na potvrzení") + if (c.frozen) " · ZMRAZENO" else "",
+                                (if (c.confirmed) "Potvrzeno v bloku ${c.height}" else "Čeká na potvrzení") + (if (c.change) " · drobné" else "") + if (c.frozen) " · ZMRAZENO" else "",
                                 fontSize = 12.sp, color = if (c.frozen) Color(0xFF3B8ED6) else MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            if (tag != null) Box(Modifier.padding(top = 4.dp)) { TagPill(tag.key) }
                         }
                     },
                     trailingContent = {
                         Row {
+                            TagMenu(tag) { vm.setCoinTag(listOf(c.id), it) }
                             IconButton(onClick = { openTx(ctx, vm, vm.txLink(c.txid, c.vout)) }) {
                                 Icon(Icons.Default.OpenInNew, "Detail", Modifier.size(20.dp))
                             }
@@ -1055,6 +1067,17 @@ fun CoinsScreen(vm: WalletViewModel) {
                     else "Vybráno ${sel.size} · ${formatSat(sel.sumOf { it.valueSat })}",
                     fontWeight = FontWeight.SemiBold
                 )
+                if (sel.isNotEmpty()) {
+                    val selTags = sel.map { vm.coinTag(it) }
+                    if (mixesNoKyc(selTags)) Text("⚠ Výběr míchá mince Bez KYC s ostatními.", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                    Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Označit vybrané:", fontSize = 13.sp)
+                        Spacer(Modifier.width(8.dp))
+                        TagPill(CoinTag.NOKYC.key, selected = selTags.all { it == CoinTag.NOKYC }) { vm.setCoinTag(sel.map { it.id }, CoinTag.NOKYC) }
+                        Spacer(Modifier.width(6.dp))
+                        TagPill(CoinTag.KYC.key, selected = selTags.all { it == CoinTag.KYC }) { vm.setCoinTag(sel.map { it.id }, CoinTag.KYC) }
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     GlassButton(onClick = { vm.selected = emptySet(); vm.prepared = null }, enabled = sel.isNotEmpty(), modifier = Modifier.weight(1f)) { Text("Zrušit výběr") }
