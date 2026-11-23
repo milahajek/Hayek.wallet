@@ -1,6 +1,8 @@
 package io.github.milahajek.hayek
 
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.clip
@@ -56,6 +58,8 @@ fun LightningHomeCard(vm: WalletViewModel) {
                     },
                     fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                @Suppress("UNUSED_VARIABLE") val bv = vm.lnBackupVersion
+                if (vm.lnBackupNeeded) Text("● Kanály nejsou zálohované", fontSize = 13.sp, color = HayekOrange, fontWeight = FontWeight.Medium)
             }
             Icon(Icons.Default.ChevronRight, null)
         }
@@ -95,6 +99,7 @@ fun LightningScreen(vm: WalletViewModel) {
                     Icon(Icons.Default.Bolt, null); Spacer(Modifier.width(6.dp)); Text("Zaplatit")
                 }
             }
+            LnBackupCard(vm)
             val chans = vm.lnChannels
             Row(Modifier.padding(top = 18.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Kanály" + (chans?.let { " (${it.size})" } ?: ""), fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
@@ -524,5 +529,54 @@ fun LnSettingsSection(vm: WalletViewModel, act: FragmentActivity) {
         text = { Text("Telefon zapomene přístupový klíč a certifikát uzlu. Peníze v kanálech zůstávají na uzlu. Klíč úplně zneplatníte na uzlu příkazem: lncli deletemacaroonid $LND_ROOT_KEY_ID") },
         confirmButton = { TextButton(onClick = { confirm = false; act.auth(vm, "Odpojit Lightning") { vm.lnRemove() } }) { Text("Odpojit") } },
         dismissButton = { TextButton(onClick = { confirm = false }) { Text("Zrušit") } }
+    )
+}
+
+/** Záloha kanálů (Static Channel Backup) – stav a tlačítko. */
+@Composable
+fun LnBackupCard(vm: WalletViewModel) {
+    @Suppress("UNUSED_VARIABLE") val bv = vm.lnBackupVersion
+    var info by remember { mutableStateOf(false) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri != null) vm.lnExportBackup(uri)
+    }
+    val need = vm.lnBackupNeeded
+    val last = vm.lnLastBackup
+    GlassCard(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(if (need) Icons.Default.Warning else Icons.Default.Shield, null, tint = if (need) HayekOrange else Color(0xFF2E9E5B))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f).clickable { info = true }) {
+                Text("Záloha kanálů", fontWeight = FontWeight.SemiBold)
+                Text(
+                    when {
+                        need && last == 0L -> "Zatím nezálohováno"
+                        need -> "Kanály se od poslední zálohy změnily"
+                        last > 0 -> "Aktuální · " + java.text.SimpleDateFormat("d. M. yyyy", java.util.Locale.forLanguageTag("cs")).format(java.util.Date(last))
+                        else -> "Bez kanálů – není co zálohovat"
+                    },
+                    fontSize = 13.sp, color = if (need) HayekOrange else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            TextButton(onClick = {
+                val day = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
+                launcher.launch("channel-backup-$day.backup")
+            }, enabled = !vm.busy && vm.lnChannels != null) { Text("Zálohovat") }
+        }
+    }
+    if (info) AlertDialog(
+        onDismissRequest = { info = false },
+        title = { Text("Záloha kanálů") },
+        text = {
+            Text(
+                "Peníze v Lightning kanálech jsou na vašem uzlu. Kdyby uzel odešel (vadný disk), obnovíte je z 24 slov LND a tohoto souboru: " +
+                    "uzel požádá protistrany o zavření kanálů a peníze se vrátí jako běžné bitcoiny.\n\n" +
+                    "• Zálohujte po každém otevření nebo zavření kanálu – aplikace vám to připomene.\n" +
+                    "• Soubor je zašifrovaný slovy LND, bez nich je k ničemu.\n" +
+                    "• Nikdy neobnovujte uzel ze staré kopie celé databáze LND – můžete přijít o peníze v kanálech.",
+                fontSize = 14.sp
+            )
+        },
+        confirmButton = { TextButton(onClick = { info = false }) { Text("Rozumím") } },
     )
 }

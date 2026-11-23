@@ -1,0 +1,1 @@
+Záloha Lightning kanálů (Static Channel Backup) z vašeho uzlu do souboru, ověřená uzlem. Připomínka po otevření nebo zavření kanálu.

@@ -113,6 +113,15 @@ class LightningTest {
         assertEquals(null to null, c.nodeAlias("03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f"))
     }
 
+    @Test fun liveChannelBackup() {
+        val c = live()
+        val data = c.channelBackup()
+        assertTrue(data.size > 16)
+        c.verifyChannelBackup(data)                 // uzel zálohu přijme
+        val bad = data.copyOf().also { it[it.size - 1] = (it[it.size - 1].toInt() xor 1).toByte() }
+        assertThrows(LndException::class.java) { c.verifyChannelBackup(bad) }
+    }
+
     @Test fun livePinMismatch() {
         live()
         val p = MemPins(); p.set("ln:${System.getenv("LND_HOST")}", "AA:BB")

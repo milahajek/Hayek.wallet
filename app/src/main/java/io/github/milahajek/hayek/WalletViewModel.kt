@@ -587,6 +587,37 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---------- Záloha Lightning kanálů ----------
+    private fun channelSetKey(ch: List<LnChannel>) = ch.map { it.channelPoint }.filter { it.isNotBlank() }.sorted().joinToString(",")
+    /** Kanály se od poslední zálohy změnily (otevření / zavření) – nebo ještě nikdy nebyly zálohované. */
+    val lnBackupNeeded: Boolean get() {
+        val ch = lnChannels ?: return false
+        val saved = prefs.getString("ln_backup_set", null)
+        return if (saved == null) ch.isNotEmpty() else saved != channelSetKey(ch)
+    }
+    val lnLastBackup: Long get() = prefs.getLong("ln_backup_at", 0)
+    var lnBackupVersion by mutableStateOf(0)
+        private set
+
+    /** Stáhne zálohu kanálů z uzlu, nechá ji uzlem ověřit a uloží do souboru. */
+    fun lnExportBackup(uri: android.net.Uri) = lnRun {
+        val cfg = lnConfig ?: return@lnRun
+        val c = lnClient(cfg)
+        val (data, chans) = withContext(Dispatchers.IO) {
+            val ch = c.channels()
+            val d = c.channelBackup()
+            c.verifyChannelBackup(d)
+            d to ch
+        }
+        withContext(Dispatchers.IO) {
+            getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use { it.write(data) }
+        }
+        lnChannels = chans
+        prefs.edit().putString("ln_backup_set", channelSetKey(chans)).putLong("ln_backup_at", System.currentTimeMillis()).apply()
+        lnBackupVersion++
+        message = "Záloha kanálů uložena ✔\nUzel ji ověřil (kanálů: ${chans.size}).\n\nObnova: na uzlu z 24 slov LND + tohoto souboru (RaspiBlitz ho chce pod názvem channel.backup)."
+    }
+
     private suspend fun lnRefreshQuiet() {
         val cfg = lnConfig ?: return
         try {
@@ -649,6 +680,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     private fun lnClear() {
         pollJob?.cancel(); pollJob = null
         lnConfig = null; lnInfo = null; lnBalance = null; lnHistory = emptyList(); lnChannels = null
+        prefs.edit().remove("ln_backup_set").remove("ln_backup_at").apply()
         lnDecoded = null; lnInvoice = null; lnInvoicePaid = false; lnError = null
     }
 

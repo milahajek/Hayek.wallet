@@ -1,0 +1,1 @@
+Lightning channel backup (Static Channel Backup) from your node to a file, verified by the node. Reminder after a channel opens or closes.

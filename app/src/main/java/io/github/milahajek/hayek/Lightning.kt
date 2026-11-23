@@ -226,6 +226,23 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
         null to null
     }
 
+    /**
+     * Záloha kanálů (Static Channel Backup) – stejný obsah jako soubor channel.backup na uzlu.
+     * Je zašifrovaná slovy LND, bez nich je k ničemu. Stačí oprávnění offchain:read.
+     */
+    fun channelBackup(): ByteArray {
+        val j = JSONObject(request("GET", "/v1/channels/backup"))
+        val b64 = j.optJSONObject("multi_chan_backup")?.optString("multi_chan_backup").orEmpty()
+        require(b64.isNotBlank()) { "Uzel neposlal zálohu kanálů." }
+        return java.util.Base64.getDecoder().decode(b64)
+    }
+
+    /** Nechá uzel ověřit, že záloha je platná (dá se z ní obnovit). */
+    fun verifyChannelBackup(data: ByteArray) {
+        val body = JSONObject().put("multi_chan_backup", JSONObject().put("multi_chan_backup", java.util.Base64.getEncoder().encodeToString(data)))
+        request("POST", "/v1/channels/backup/verify", body)
+    }
+
     /** Otevřené i otevírající se kanály. */
     fun channels(): List<LnChannel> {
         val out = mutableListOf<LnChannel>()
