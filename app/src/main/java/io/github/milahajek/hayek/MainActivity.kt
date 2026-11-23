@@ -161,7 +161,7 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
             setup -> vm.screen = Screen.Welcome
         }
     }
-    if (screen in inWallet || setup || (screen is Screen.Intro && screen.back != Screen.Welcome)) BackHandler { back() }
+    if (screen in inWallet || setup || screen is Screen.Intro) BackHandler { back() }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -169,7 +169,12 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 title = {
-                    Column {
+                    // Klepnutí na název aplikace otevře průvodce „proč a jak“ (návrat na stejné místo).
+                    Column(
+                        Modifier.clip(RoundedCornerShape(12.dp))
+                            .clickable(enabled = screen !is Screen.Intro, onClickLabel = "O aplikaci") { vm.screen = Screen.Intro(screen) }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
                         Text(buildAnnotatedString {
                             withStyle(SpanStyle(color = Orange, fontWeight = FontWeight.ExtraBold)) { append("Hayek") }
                             withStyle(SpanStyle(fontWeight = FontWeight.Light)) { append(" Wallet") }
