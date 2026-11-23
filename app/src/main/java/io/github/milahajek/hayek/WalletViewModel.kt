@@ -44,6 +44,8 @@ fun encodeLndSecret(c: LndConfig) = c.hostPort + "|" + c.macaroonHex
 fun decodeLndSecret(s: String) = LndConfig(s.substringBefore("|"), s.substringAfter("|"))
 
 class WalletViewModel(app: Application) : AndroidViewModel(app) {
+    init { Lang.init(app) }
+
 
     private val prefs = app.getSharedPreferences("settings", Context.MODE_PRIVATE)
     val store = SecureStore(app)
@@ -104,6 +106,53 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         coins.filter { !it.frozen }.groupBy { coinTagKey(it) }.mapValues { (_, v) -> v.sumOf { it.valueSat } }
     fun inputTags(p: PreparedTx): List<CoinTag?> = p.inputIds.map { id -> coins.find { it.id == id }?.let { coinTag(it) } }
 
+    // ---------- Upozornění na příchozí platby (na pozadí) ----------
+    var notifyEnabled by mutableStateOf(IncomingNotifier.enabled(app))
+        private set
+    fun setNotify(on: Boolean) = run {
+        val ctx = getApplication<Application>()
+        if (on) {
+            val c = core ?: return@run
+            val desc = withContext(Dispatchers.IO) { c.publicDescriptor() }
+            withContext(Dispatchers.IO) { IncomingNotifier.enable(ctx, desc) }
+            notifyEnabled = true
+            message = "Upozornění zapnuta ✔\nTelefon se zhruba každých 15 minut podívá na váš uzel. " +
+                "Mimo domácí síť to funguje jen se zapnutou VPN (Teleport)."
+        } else {
+            withContext(Dispatchers.IO) { IncomingNotifier.disable(ctx) }
+            notifyEnabled = false
+        }
+    }
+
+    // ---------- Adresář ----------
+    var contacts by mutableStateOf(Contacts.fromJson(prefs.getString("contacts", null)))
+        private set
+    private fun saveContacts(list: List<Contact>) {
+        contacts = list; prefs.edit().putString("contacts", Contacts.toJson(list)).apply(); labelChanged()
+    }
+    fun contactFor(address: String): Contact? = Contacts.normalize(address)?.let { a -> contacts.find { it.address == a } }
+    /** Vrací chybovou hlášku, nebo null při úspěchu. */
+    fun saveContact(name: String, address: String): String? {
+        val a = Contacts.normalize(address) ?: return "Neplatná bitcoinová adresa."
+        val n = name.trim().takeIf { it.isNotEmpty() } ?: return "Zadejte jméno."
+        if (state?.address == a || coins.any { it.address == a }) return "Tohle je adresa vaší vlastní peněženky."
+        saveContacts(Contacts.upsert(contacts, Contact(n.take(60), a))); return null
+    }
+    fun removeContact(c: Contact) = saveContacts(contacts - c)
+
+    // ---------- Žádost o platbu ----------
+    /** Popis z žádosti o platbu se po příchodu peněz sám zapíše jako poznámka k transakci. */
+    fun rememberRequest(address: String, label: String) {
+        val l = label.trim()
+        prefs.edit().apply { if (l.isEmpty()) remove("rq:$address") else putString("rq:$address", l.take(200)) }.apply()
+    }
+    private fun applyRequestNotes() {
+        coins.forEach { c ->
+            val l = prefs.getString("rq:${c.address}", null) ?: return@forEach
+            if (note(c.txid).isBlank()) setNote(c.txid, l)
+        }
+    }
+
     // ---------- Ochrana proti prachu (dust attack) ----------
     var dustThreshold by mutableStateOf(prefs.getLong("dust_threshold", Dust.DEFAULT_THRESHOLD))
         private set
@@ -148,7 +197,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             val t = coinTag(c)
             if (t == null && !c.frozen) null else c.id to Bip329.Output(t, if (c.frozen) false else null)
         }.toMap()
-        return Bip329.Labels(notes, outs, addrs)
+        return Bip329.Labels(notes, outs, addrs, contacts.associate { it.address to it.name })
     }
 
     /** Uloží zálohu do souboru (uri ze systémového dialogu). Prázdné heslo = nešifrovaně (čitelné i ve Sparrow). */
@@ -178,6 +227,10 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         val l = Bip329.parse(text)
         require(l.size > 0) { "V souboru nejsou žádné štítky, které by Hayek Wallet znala." }
         notesPrefs.edit().apply { l.notes.forEach { (k, v) -> putString(k, v) } }.apply(); notesVersion++
+        if (l.contacts.isNotEmpty()) {
+            val merged = l.contacts.entries.fold(contacts) { acc, (a, n) -> Contacts.normalize(a)?.let { Contacts.upsert(acc, Contact(n.take(60), it)) } ?: acc }
+            contacts = merged; prefs.edit().putString("contacts", Contacts.toJson(merged)).apply()
+        }
         tagPrefs.edit().apply {
             l.addresses.forEach { (a, t) -> putString("a:$a", t.key) }
             l.outputs.forEach { (id, o) -> o.tag?.let { putString("c:$id", it.key) } }
@@ -193,7 +246,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (frozen > 0) coins = lock.withLock { withContext(Dispatchers.IO) { c!!.coins() } }
         prepared = null
-        message = "Štítky načteny ✔\nPoznámky: ${l.notes.size} · značky mincí: ${l.outputs.count { it.value.tag != null }} · značky adres: ${l.addresses.size}" +
+        message = "Štítky načteny ✔\nPoznámky: ${l.notes.size} · značky mincí: ${l.outputs.count { it.value.tag != null }} · značky adres: ${l.addresses.size} · kontakty: ${l.contacts.size}" +
             if (frozen > 0) " · změněno zmrazení: $frozen" else ""
     }
 
@@ -227,12 +280,15 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         note(b.oldTxid).takeIf { it.isNotBlank() }?.let { setNote(newId, it) }
         tagRaw("t:${b.oldTxid}")?.let { tagPrefs.edit().putString("t:$newId", it).apply(); tagsVersion++; labelChanged() }
         bumpPrepared = null; txDetail = null
+        success = Success("Poplatek zvýšen")
         message = "Poplatek zvýšen ✔\nNová transakce nahradila původní.\nTXID: $newId"
         syncNow()
     }
     var state by mutableStateOf<WalletState?>(null)
     var busy by mutableStateOf(false)
     var message by mutableStateOf<String?>(null)
+    /** Krátká animace úspěchu (zobrazí se před zprávou). */
+    var success by mutableStateOf<Success?>(null)
     var prepared by mutableStateOf<PreparedTx?>(null)
     var feeRate by mutableStateOf("2")
     var feeEstimates by mutableStateOf<FeeEstimates?>(null)
@@ -417,6 +473,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                 state = withContext(Dispatchers.IO) { c.state() }
                 coins = withContext(Dispatchers.IO) { c.coins() }
                 guardDust(c)
+                applyRequestNotes()
                 selected = selected.filter { id -> coins.any { it.id == id && !it.frozen } }.toSet()
             }
             connected = true
@@ -498,6 +555,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             combineTags(inputTags(p))?.let { tagPrefs.edit().putString("t:$txid", it.key).apply(); tagsVersion++; labelChanged() }
             selected = emptySet()
             screen = Screen.Home
+            success = Success("Odesláno", formatSat(p.amountSat))
             message = "Odesláno ✔\nTXID: $txid"
         } finally {
             // Ať to dopadlo jakkoli, nepřipravená transakce se nesmí odeslat podruhé a stav se musí načíst z uzlu.
@@ -561,7 +619,10 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         notesPrefs.edit().clear().apply(); notesVersion++
         tagPrefs.edit().clear().apply(); tagsVersion++; payFrom = null
         labelChanges = 0; offerLabelsImport = false; dustIds = emptySet()
-        prefs.edit().remove("ln_limit").remove("hide_balance").remove("label_changes").remove("labels_backup_at").remove("dust_seen").remove("dust_ids").apply()
+        contacts = emptyList()
+        IncomingNotifier.disable(getApplication()); notifyEnabled = false
+        prefs.edit().apply { prefs.all.keys.filter { it.startsWith("rq:") }.forEach { remove(it) } }.apply()
+        prefs.edit().remove("contacts").remove("ln_limit").remove("hide_balance").remove("label_changes").remove("labels_backup_at").remove("dust_seen").remove("dust_ids").apply()
         dbFile.delete()
         File(dbFile.path + "-wal").delete(); File(dbFile.path + "-shm").delete()
         core = null
@@ -732,6 +793,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         if (r.ok) {
             lnDecoded = null
             screen = Screen.Lightning
+            success = Success("Zaplaceno", formatSat(amount), lightning = true)
             message = "Zaplaceno ⚡ ✔\n${amount} sat, poplatek ${r.feeSat} sat"
         } else message = r.failure
         lnRefreshQuiet()
@@ -748,7 +810,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             while (System.currentTimeMillis() < until && lnInvoice == inv && screen == Screen.LnReceive) {
                 delay(2_500)
                 val paid = try { withContext(Dispatchers.IO) { lnClient().isSettled(inv.rHashHex) } } catch (_: Exception) { false }
-                if (paid && lnInvoice == inv) { lnInvoicePaid = true; lnRefreshQuiet(); break }
+                if (paid && lnInvoice == inv) { lnInvoicePaid = true; success = Success("Přijato", inv.amountSat.takeIf { it > 0 }?.let { formatSat(it) }, lightning = true); lnRefreshQuiet(); break }
             }
         }
     }

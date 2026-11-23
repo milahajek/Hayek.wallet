@@ -20,8 +20,9 @@ object Bip329 {
         val notes: Map<String, String> = emptyMap(),        // txid → poznámka
         val outputs: Map<String, Output> = emptyMap(),      // txid:vout → značka / zmrazení
         val addresses: Map<String, CoinTag> = emptyMap(),   // adresa → značka
+        val contacts: Map<String, String> = emptyMap(),      // adresa příjemce → jméno (adresář; pole „hayek_contact“)
     ) {
-        val size get() = notes.size + outputs.size + addresses.size
+        val size get() = notes.size + outputs.size + addresses.size + contacts.size
     }
 
     fun tagLabel(t: CoinTag) = t.label   // „Bez KYC“ / „KYC“ – čitelné i ve Sparrow
@@ -41,6 +42,9 @@ object Bip329 {
         l.addresses.toSortedMap().forEach { (a, t) ->
             appendLine(JSONObject().put("type", "addr").put("ref", a).put("label", tagLabel(t)).toString())
         }
+        l.contacts.toSortedMap().forEach { (a, n) ->
+            appendLine(JSONObject().put("type", "addr").put("ref", a).put("label", n).put("hayek_contact", true).toString())
+        }
         l.outputs.toSortedMap().forEach { (id, o) ->
             val j = JSONObject().put("type", "output").put("ref", id)
             o.tag?.let { j.put("label", tagLabel(it)) }
@@ -54,13 +58,15 @@ object Bip329 {
         val notes = mutableMapOf<String, String>()
         val outputs = mutableMapOf<String, Output>()
         val addrs = mutableMapOf<String, CoinTag>()
+        val contacts = mutableMapOf<String, String>()
         text.lineSequence().map { it.trim() }.filter { it.startsWith("{") }.forEach { line ->
             val j = try { JSONObject(line) } catch (_: Exception) { return@forEach }
             val ref = j.optString("ref").trim().takeIf { it.isNotEmpty() && it.length <= 200 } ?: return@forEach
             val label = if (j.has("label") && !j.isNull("label")) j.optString("label").trim() else null
             when (j.optString("type")) {
                 "tx" -> if (!label.isNullOrBlank() && Regex("[0-9a-fA-F]{64}").matches(ref)) notes[ref.lowercase()] = label.take(200)
-                "addr" -> tagFromLabel(label)?.let { addrs[ref] = it }
+                "addr" -> if (j.optBoolean("hayek_contact")) { if (!label.isNullOrBlank()) contacts[ref] = label.take(60) }
+                    else tagFromLabel(label)?.let { addrs[ref] = it }
                 "output" -> if (Regex("[0-9a-fA-F]{64}:\\d{1,6}").matches(ref)) {
                     val sp = if (j.has("spendable")) j.optBoolean("spendable", true) else null
                     val o = Output(tagFromLabel(label), sp)
@@ -68,7 +74,7 @@ object Bip329 {
                 }
             }
         }
-        return Labels(notes, outputs, addrs)
+        return Labels(notes, outputs, addrs, contacts)
     }
 
     // ---------- Šifrování heslem (formát Hayek, ne součást BIP-329) ----------

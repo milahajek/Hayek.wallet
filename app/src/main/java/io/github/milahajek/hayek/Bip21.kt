@@ -54,3 +54,15 @@ private fun looksLikeAddress(a: String): Boolean {
         else -> false
     }
 }
+
+/** „150000“ sat → „0.0015“ BTC (bez zbytečných nul) – pro odkaz BIP21. */
+fun satToBtcString(sat: Long): String = BigDecimal(sat).movePointLeft(8).stripTrailingZeros().toPlainString()
+
+/** Sestaví žádost o platbu `bitcoin:ADRESA?amount=…&label=…` (BIP21). Bez částky a popisu vrátí jen odkaz s adresou. */
+fun buildPaymentUri(address: String, amountSat: Long? = null, label: String? = null): String {
+    val params = buildList {
+        if (amountSat != null && amountSat > 0) add("amount=" + satToBtcString(amountSat))
+        label?.trim()?.takeIf { it.isNotEmpty() }?.let { add("label=" + java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20")) }
+    }
+    return "bitcoin:$address" + if (params.isEmpty()) "" else "?" + params.joinToString("&")
+}

@@ -55,4 +55,12 @@ class QrTest {
             assertEquals(text, QrDecoder().decode(src))
         }
     }
+
+    @Test fun buildRequestRoundTrip() {
+        assertEquals("bitcoin:$addr", buildPaymentUri(addr))
+        val uri = buildPaymentUri(addr, 150_000, "Oběd & káva")
+        assertEquals("bitcoin:$addr?amount=0.0015&label=Ob%C4%9Bd%20%26%20k%C3%A1va", uri)
+        assertEquals(PaymentRequest(addr, 150_000, "Oběd & káva"), parsePaymentQr(uri))
+        assertEquals("1", satToBtcString(100_000_000)); assertEquals("0.00000001", satToBtcString(1))
+    }
 }

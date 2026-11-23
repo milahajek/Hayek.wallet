@@ -64,6 +64,7 @@ class MainActivity : FragmentActivity() {
     private val vm: WalletViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Lang.init(this)
         super.onCreate(savedInstanceState)
         // Žádné snímky obrazovky a žádný náhled v přepínači aplikací.
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
@@ -220,13 +221,14 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
         }
     ) { pad ->
         Box(Modifier.padding(pad).fillMaxSize()) {
-            when (screen) {
+            ScreenTransition(screen) { s ->
+            when (s) {
                 Screen.Locked -> LockedScreen(vm, act)
                 Screen.Welcome -> WelcomeScreen(vm)
-                is Screen.Intro -> IntroScreen(vm, screen.back)
+                is Screen.Intro -> IntroScreen(vm, s.back)
                 Screen.Dice -> DiceScreen(vm)
-                is Screen.ShowSeed -> ShowSeedScreen(screen.words, vm)
-                is Screen.Verify -> IncognitoKeyboard { VerifyScreen(screen, vm, act) }
+                is Screen.ShowSeed -> ShowSeedScreen(s.words, vm)
+                is Screen.Verify -> IncognitoKeyboard { VerifyScreen(s, vm, act) }
                 Screen.Restore -> IncognitoKeyboard { RestoreScreen(vm, act) }
                 Screen.WatchImport -> IncognitoKeyboard { WatchImportScreen(vm, act) }
                 Screen.Coins -> CoinsScreen(vm)
@@ -241,13 +243,16 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                 Screen.LnSetup -> IncognitoKeyboard { LnSetupScreen(vm, act) }
                 Screen.Seed -> SeedScreen(vm, act)
             }
+            }
             if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
         }
     }
 
     vm.fingerprintCheck?.let { FingerprintCheckDialog(vm, act) }
 
-    vm.message?.let { msg ->
+    vm.success?.let { SuccessOverlay(it) { vm.success = null } }
+
+    if (vm.success == null) vm.message?.let { msg ->
         val txid = msg.substringAfter("TXID: ", "").trim()
         AlertDialog(
             onDismissRequest = { vm.message = null },
@@ -556,7 +561,7 @@ fun TxRow(tx: TxItem, vm: WalletViewModel, onClick: () -> Unit) {
         modifier = Modifier.clickable(onClick = onClick),
         leadingContent = {
             Icon(if (incoming) Icons.Default.CallReceived else Icons.Default.CallMade, null,
-                tint = if (incoming) Color(0xFF2E9E4F) else Orange)
+                tint = if (incoming) Color(0xFF2E9E4F) else Orange, modifier = Modifier.pendingPulse(!tx.confirmed))
         },
         headlineContent = { Text(vm.amount(tx.deltaSat, sign = true), fontWeight = FontWeight.SemiBold) },
         supportingContent = {
@@ -580,25 +585,71 @@ fun qrBitmap(text: String, size: Int = 640): Bitmap {
 }
 
 @Composable
-fun ReceiveScreen(vm: WalletViewModel) {
+fun ReceiveScreen(vm: WalletViewModel, preview: Triple<Boolean, String, String>? = null) {
     val ctx = LocalContext.current
     val addr = vm.state?.address ?: ""
-    val bmp = remember(addr) { if (addr.isNotEmpty()) qrBitmap("bitcoin:$addr") else null }
+    var withAmount by remember(addr) { mutableStateOf(preview?.first ?: false) }
+    var amount by remember(addr) { mutableStateOf(preview?.second ?: "") }
+    var label by remember(addr) { mutableStateOf(preview?.third ?: "") }
+    val sat = amount.toLongOrNull()?.takeIf { withAmount && it > 0 }
+    val lbl = label.trim().takeIf { withAmount && it.isNotEmpty() }
+    val uri = buildPaymentUri(addr, sat, lbl)
+    val isRequest = sat != null || lbl != null
+    val bmp = remember(uri) { if (addr.isNotEmpty()) qrBitmap(uri) else null }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Přijmout bitcoiny", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(16.dp))
         bmp?.let { Image(it.asImageBitmap(), "QR kód adresy", Modifier.size(260.dp).background(Color.White).padding(8.dp)) }
-        Spacer(Modifier.height(16.dp))
+        if (isRequest) {
+            Spacer(Modifier.height(10.dp))
+            Text(listOfNotNull(sat?.let { formatSat(it) }, lbl).joinToString(" · "), fontWeight = FontWeight.SemiBold, fontSize = 17.sp, textAlign = TextAlign.Center)
+        }
+        Spacer(Modifier.height(12.dp))
         androidx.compose.foundation.text.selection.SelectionContainer {
             Text(addr.chunked(4).joinToString(" "), fontFamily = FontFamily.Monospace, fontSize = 16.sp, textAlign = TextAlign.Center)
         }
-        Spacer(Modifier.height(16.dp))
-        HayekButton(onClick = { copy(ctx, addr); vm.message = "Adresa zkopírována." }, Modifier.fillMaxWidth().height(52.dp)) {
-            Icon(Icons.Default.ContentCopy, null); Spacer(Modifier.width(6.dp)); Text("Kopírovat adresu")
+        Spacer(Modifier.height(12.dp))
+        GlassCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
+                Row(Modifier.fillMaxWidth().clickable { withAmount = !withAmount }, verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Požadovat částku", fontWeight = FontWeight.SemiBold)
+                        Text("QR kód bude obsahovat částku a popis – plátce je nemusí přepisovat.", fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = withAmount, onCheckedChange = { withAmount = it })
+                }
+                if (withAmount) {
+                    OutlinedTextField(
+                        value = amount, onValueChange = { amount = it.filter(Char::isDigit).take(16) },
+                        label = { Text("Částka v satoshi") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        supportingText = { Text(if (sat != null) formatBtc(sat) else "1 BTC = 100 000 000 sat") }
+                    )
+                    OutlinedTextField(
+                        value = label, onValueChange = { label = it.take(100) },
+                        label = { Text("Popis (nepovinný)") }, placeholder = { Text("např. Oběd s bráchou") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                        supportingText = { Text("Po přijetí se popis sám uloží jako poznámka k platbě.") }
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        val shareText = if (isRequest) uri else addr
+        HayekButton(onClick = {
+            if (lbl != null) vm.rememberRequest(addr, lbl)
+            copy(ctx, shareText); vm.message = if (isRequest) "Žádost o platbu zkopírována." else "Adresa zkopírována."
+        }, Modifier.fillMaxWidth().height(52.dp)) {
+            Icon(Icons.Default.ContentCopy, null); Spacer(Modifier.width(6.dp)); Text(if (isRequest) "Kopírovat žádost" else "Kopírovat adresu")
         }
         GlassButton(onClick = {
-            ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, addr), "Sdílet adresu"))
+            if (lbl != null) vm.rememberRequest(addr, lbl)
+            ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, shareText),
+                if (isRequest) "Sdílet žádost o platbu" else "Sdílet adresu"))
         }, Modifier.fillMaxWidth()) { Text("Sdílet") }
+        if (lbl != null) LaunchedEffect(lbl, addr) { kotlinx.coroutines.delay(800); vm.rememberRequest(addr, lbl) }
         TextButton(onClick = { vm.newAddress() }, enabled = !vm.busy) { Text("Vygenerovat novou adresu") }
         Text("Pro každou platbu je lepší nová adresa (soukromí). Staré adresy ale fungují dál.",
             fontSize = 13.sp, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -614,7 +665,9 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
     var all by remember { mutableStateOf(false) }
     var scanning by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
+    var pickContact by remember { mutableStateOf(false) }
     val p = vm.prepared
+    if (pickContact) ContactsDialog(vm, onDismiss = { pickContact = false }, onPick = { c -> to = c.address; note = null; vm.prepared = null; pickContact = false })
     if (scanning) QrScanDialog("Načíst adresu příjemce", onDismiss = { scanning = false }, onResult = { raw ->
         scanning = false
         val req = parsePaymentQr(raw)
@@ -643,6 +696,7 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
             label = { Text("Adresa příjemce") }, placeholder = { Text("bc1… / 1… / 3…") }, modifier = Modifier.fillMaxWidth(),
             trailingIcon = {
                 Row {
+                    IconButton(onClick = { pickContact = true }) { Icon(Icons.Default.Person, "Adresář") }
                     IconButton(onClick = { scanning = true }) { Icon(Icons.Default.QrCodeScanner, "Načíst QR kód") }
                     IconButton(onClick = {
                         paste(ctx)?.let { raw ->
@@ -656,6 +710,7 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
             },
             supportingText = note?.let { n -> { Text(n) } }
         )
+        ContactHint(vm, to)
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
             value = amount, onValueChange = { amount = it.filter(Char::isDigit); vm.prepared = null },
@@ -702,7 +757,8 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
                 Column(Modifier.padding(16.dp)) {
                     Text("Zkontrolujte platbu – nejde vrátit!", fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(6.dp))
-                    Text("Komu:"); Text(p.to.chunked(4).joinToString(" "), fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+                    Text("Komu:" + (vm.contactFor(p.to)?.let { " 👤 ${it.name}" } ?: ""), fontWeight = if (vm.contactFor(p.to) != null) FontWeight.SemiBold else null)
+                    Text(p.to.chunked(4).joinToString(" "), fontFamily = FontFamily.Monospace, fontSize = 14.sp)
                     Spacer(Modifier.height(4.dp))
                     Text("Částka: ${formatSat(p.amountSat)}")
                     Text("Poplatek: ${formatSat(p.feeSat)} (${p.feeRate} sat/vB)")
@@ -880,7 +936,15 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
 
         if (vm.isOpen) {
             HorizontalDivider(Modifier.padding(vertical = 20.dp))
+            var showContacts by remember { mutableStateOf(false) }
+            GlassButton(onClick = { showContacts = true }, Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Person, null); Spacer(Modifier.width(6.dp)); Text("Adresář (${vm.contacts.size})")
+            }
+            if (showContacts) ContactsDialog(vm, onDismiss = { showContacts = false })
+            HorizontalDivider(Modifier.padding(vertical = 20.dp))
             LabelsSection(vm)
+            HorizontalDivider(Modifier.padding(vertical = 20.dp))
+            NotifySection(vm)
             HorizontalDivider(Modifier.padding(vertical = 20.dp))
             DustSection(vm)
             HorizontalDivider(Modifier.padding(vertical = 20.dp))

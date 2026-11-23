@@ -17,9 +17,10 @@ class Bip329Test {
             notes = mapOf(tx to "Bisq – nákup za CZK \"uvozovky\""),
             outputs = mapOf("$tx:0" to Bip329.Output(CoinTag.NOKYC, null), "$tx2:1" to Bip329.Output(null, false), "$tx2:2" to Bip329.Output(CoinTag.KYC, false)),
             addresses = mapOf("bc1qabc" to CoinTag.KYC),
+            contacts = mapOf("bc1qbracha" to "Brácha"),
         )
         val text = Bip329.toJsonl(l)
-        assertEquals(5, text.trim().lines().size)
+        assertEquals(6, text.trim().lines().size)
         assertEquals(l, Bip329.parse(text))
     }
 

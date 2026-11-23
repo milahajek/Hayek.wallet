@@ -28,6 +28,31 @@ class SecureStore(context: Context) {
 
     fun hasSeed() = prefs.contains("seed")
 
+    // ---------- Údaje pro práci na pozadí (upozornění na platby) ----------
+    // Jen VEŘEJNÝ deskriptor (adresy, ne klíče). Šifrovaný klíčem bez ověření otiskem, aby ho šlo
+    // přečíst i bez odemčení – chrání před vynesením souboru, ne před aplikací samotnou.
+    private val bgAlias = "bg_key_v1"
+    private fun bgKey(): SecretKey {
+        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (ks.getKey(bgAlias, null) as? SecretKey)?.let { return it }
+        val spec = KeyGenParameterSpec.Builder(bgAlias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256).build()
+        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply { init(spec) }.generateKey()
+    }
+    fun saveBg(name: String, value: String) {
+        val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, bgKey()) }
+        val ct = c.doFinal(value.toByteArray())
+        prefs.edit().putString("bg_$name", Base64.encodeToString(c.iv, Base64.NO_WRAP) + ":" + Base64.encodeToString(ct, Base64.NO_WRAP)).apply()
+    }
+    fun loadBg(name: String): String? {
+        val v = prefs.getString("bg_$name", null) ?: return null
+        val (iv, ct) = v.split(":").let { Base64.decode(it[0], Base64.NO_WRAP) to Base64.decode(it[1], Base64.NO_WRAP) }
+        val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, bgKey(), GCMParameterSpec(128, iv)) }
+        return String(c.doFinal(ct))
+    }
+    fun removeBg(name: String) = prefs.edit().remove("bg_$name").apply()
+
     private fun key(): SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (ks.getKey(alias, null) as? SecretKey)?.let { return it }
@@ -133,7 +158,7 @@ class SecureStore(context: Context) {
     fun wipe() {
         prefs.edit().clear().commit()
         try {
-            KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.apply { deleteEntry(alias); deleteEntry(canaryAlias) }
+            KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.apply { deleteEntry(alias); deleteEntry(canaryAlias); deleteEntry(bgAlias) }
         } catch (_: Exception) {}
     }
 }

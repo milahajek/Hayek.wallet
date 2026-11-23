@@ -158,3 +158,26 @@ fun OfferLabelsImportDialog(vm: WalletViewModel) {
             onDismiss = { vm.labelsImportNeedsPassword = null }, onConfirm = { vm.importLabels(uri, it) })
     }
 }
+
+/** Nastavení → upozornění na příchozí platby. */
+@Composable
+fun NotifySection(vm: WalletViewModel) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.setNotify(true)
+        else vm.message = "Bez povolení oznámení nemůže aplikace upozorňovat. Povolíte ho v Nastavení telefonu → Aplikace → Hayek Wallet → Oznámení."
+    }
+    Text("Upozornění na platby", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Dát vědět, když přijdou bitcoiny – i když je aplikace zavřená. Telefon se asi každých 15 minut podívá na váš uzel " +
+            "(jen veřejná data, bez klíčů). Mimo domov jen se zapnutou VPN.",
+            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+        Spacer(Modifier.width(8.dp))
+        Switch(checked = vm.notifyEnabled, enabled = !vm.busy, onCheckedChange = { on ->
+            if (on && android.os.Build.VERSION.SDK_INT >= 33 &&
+                ctx.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) permission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            else vm.setNotify(on)
+        })
+    }
+}
