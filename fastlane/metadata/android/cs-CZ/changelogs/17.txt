@@ -1,0 +1,1 @@
+Oprava: připojení k vlastnímu uzlu na Androidu (ověřený přeposílač naslouchal na IPv6). Diagnostika nově testuje i ověřené spojení.

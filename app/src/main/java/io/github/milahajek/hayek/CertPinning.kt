@@ -173,6 +173,10 @@ fun diagnoseConnection(url: String, pins: PinStore): String {
         val c = org.bitcoindevkit.ElectrumClient(url.trim(), null, 15.toUByte(), 0.toUByte(), false)
         c.serverFeatures().serverVersion
     }
+    if (addr.ssl && !isPublicServer(url)) step("6 Ověřené spojení (přeposílač s kontrolou certifikátu)") {
+        val c = connect(url, pins)
+        "${c.serverFeatures().serverVersion}, blok ${c.blockHeadersSubscribe().height}"
+    }
     if (!addr.ssl && out.contains("✘ 4") && out.contains("unexpected EOF"))
         out.append("\n→ Port nejspíš čeká šifrované spojení. Zkuste ssl://${addr.hostPort}")
     return out.toString().trimEnd()
@@ -187,7 +191,8 @@ fun diagnoseConnection(url: String, pins: PinStore): String {
  */
 class PinnedRelay private constructor(private val host: String, private val port: Int, private val store: PinStore) {
     private val hostPort = "$host:$port"
-    private val server = ServerSocket(0, 16, InetAddress.getLoopbackAddress())
+    // Výslovně IPv4 127.0.0.1: na Androidu vrací getLoopbackAddress() IPv6 ::1 a BDK (tcp://127.0.0.1) by se netrefilo.
+    private val server = ServerSocket(0, 16, InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)))
     val localPort: Int get() = server.localPort
     /** Poslední zjištěná neshoda certifikátu (aby šla ukázat uživateli). */
     @Volatile var lastMismatch: CertMismatchException? = null
