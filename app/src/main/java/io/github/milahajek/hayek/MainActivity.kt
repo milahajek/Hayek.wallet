@@ -166,8 +166,8 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+            CenterAlignedTopAppBar(
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent),
                 title = {
                     // Klepnutí na název aplikace otevře průvodce „proč a jak“ (návrat na stejné místo).
                     Column(
@@ -176,9 +176,12 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                       Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(painterResource(R.drawable.ic_logo), "Logo Hayek Wallet", Modifier.size(30.dp))
-                        Spacer(Modifier.width(8.dp))
-                      Column {
+                        // Kde je velké logo uprostřed obrazovky (průvodce, úvod, zámek), malé v liště nedáváme.
+                        if (screen !is Screen.Intro && screen != Screen.Welcome && screen != Screen.Locked) {
+                            Image(painterResource(R.drawable.ic_logo), "Logo Hayek Wallet", Modifier.size(30.dp))
+                            Spacer(Modifier.width(8.dp))
+                        }
+                      Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(buildAnnotatedString {
                             withStyle(SpanStyle(color = Orange, fontWeight = FontWeight.ExtraBold)) { append("Hayek") }
                             withStyle(SpanStyle(fontWeight = FontWeight.Light)) { append(" Wallet") }

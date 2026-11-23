@@ -23,11 +23,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
-private data class IntroPage(val icon: ImageVector, val title: String, val text: String, val points: List<String> = emptyList())
+private data class IntroPage(val icon: ImageVector?, val title: String, val text: String, val points: List<String> = emptyList())
 
 private val pages = listOf(
     IntroPage(
-        Icons.Default.AccountBalanceWallet, "Vítejte v Hayek Wallet",
+        null, "Vítejte v Hayek Wallet",
         "Bitcoinová peněženka, ve které peníze opravdu patří jen vám. Žádný účet, žádná firma, žádný server, který by je mohl zablokovat.",
         listOf(
             "Klíče k penězům vznikají a zůstávají jen ve vašem telefonu.",
@@ -89,10 +89,12 @@ fun IntroScreen(vm: WalletViewModel, back: Screen) {
         HorizontalPager(pager, Modifier.weight(1f)) { i ->
             val p = pages[i]
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(84.dp).clip(CircleShape).background(HayekOrange.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                    Icon(p.icon, null, tint = HayekOrange, modifier = Modifier.size(46.dp))
+                p.icon?.let { icon ->
+                    Box(Modifier.size(84.dp).clip(CircleShape).background(HayekOrange.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                        Icon(icon, null, tint = HayekOrange, modifier = Modifier.size(46.dp))
+                    }
+                    Spacer(Modifier.height(16.dp))
                 }
-                Spacer(Modifier.height(16.dp))
                 Text(p.title, fontSize = 24.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(10.dp))
                 Text(p.text, fontSize = 16.sp, textAlign = TextAlign.Center)

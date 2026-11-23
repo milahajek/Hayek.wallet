@@ -1,0 +1,1 @@
+Centered title in the top bar, tidier guide.
