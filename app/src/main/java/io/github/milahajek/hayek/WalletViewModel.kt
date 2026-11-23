@@ -398,12 +398,22 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---------- Úložiště klíče (StrongBox / TEE) ----------
+    private val hasStrongBox = app.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_STRONGBOX_KEYSTORE)
+    var keyLevel by mutableStateOf<String?>(null)
+        private set
+
     // ---------- Odemknutí a založení ----------
 
     /** Volat až po úspěšném ověření otiskem/PINem. */
     fun unlocked() = run {
         val secret = withContext(Dispatchers.IO) { store.loadSeed() }
         withContext(Dispatchers.IO) { store.ensureBioCanary() }
+        // Jednorázově přesunout šifrovací klíč do StrongBoxu (jsme v 60s okně po ověření).
+        val moved = withContext(Dispatchers.IO) { runCatching { store.migrateToStrongBox(hasStrongBox) }.getOrDefault(false) }
+        keyLevel = withContext(Dispatchers.IO) { store.keyLevel() }
+        if (moved) message = L("🔐 Šifrovací klíč peněženky je teď ve StrongBoxu – samostatném bezpečnostním čipu telefonu.",
+            "🔐 The wallet's encryption key is now in StrongBox – the phone's separate security chip.")
         lnConfig = withContext(Dispatchers.IO) { runCatching { store.loadExtra(LND_KEY)?.let(::decodeLndSecret) }.getOrNull() }
         open(secret)
         if (lnConfig != null) viewModelScope.launch { lnRefreshQuiet() }
@@ -442,6 +452,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             dbFile.delete()
             store.saveSeed(words)
         }
+        keyLevel = withContext(Dispatchers.IO) { store.keyLevel() }
         open(words)
         if (restored) offerLabelsImport = true
     }

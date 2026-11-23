@@ -1,7 +1,10 @@
 package io.github.milahajek.hayek
 
 import android.content.Context
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyInfo
+import android.security.keystore.StrongBoxUnavailableException
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.util.Base64
@@ -13,6 +16,7 @@ import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
+import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 
 const val AUTHENTICATORS =
@@ -24,7 +28,8 @@ const val AUTHENTICATORS =
  */
 class SecureStore(context: Context) {
     private val prefs = context.getSharedPreferences("secure", Context.MODE_PRIVATE)
-    private val alias = "seed_key_v1"
+    /** Alias klíče: starší instalace „seed_key_v1“ (TEE), nové a přesunuté klíče ve StrongBoxu „seed_key_sb…“. */
+    private var alias: String = prefs.getString("key_alias", null) ?: if (prefs.contains("seed")) "seed_key_v1" else "seed_key_sb1"
 
     fun hasSeed() = prefs.contains("seed")
 
@@ -53,10 +58,11 @@ class SecureStore(context: Context) {
     }
     fun removeBg(name: String) = prefs.edit().remove("bg_$name").apply()
 
-    private fun key(): SecretKey {
-        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (ks.getKey(alias, null) as? SecretKey)?.let { return it }
-        val spec = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+    private fun keyStore() = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+
+    /** Vytvoří klíč; se strongBox = true v samostatném bezpečnostním čipu (StrongBox), jinak v TEE. */
+    private fun generate(a: String, strongBox: Boolean): SecretKey {
+        val spec = KeyGenParameterSpec.Builder(a, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setKeySize(256)
@@ -66,10 +72,54 @@ class SecureStore(context: Context) {
             )
             // Přidání nového otisku nesmí peněženku zamknout navždy.
             .setInvalidatedByBiometricEnrollment(false)
+            .setIsStrongBoxBacked(strongBox)
             .build()
-        val kg = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
-        kg.init(spec)
-        return kg.generateKey()
+        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply { init(spec) }.generateKey()
+    }
+
+    private fun key(): SecretKey {
+        (keyStore().getKey(alias, null) as? SecretKey)?.let { return it }
+        // Nový klíč: nejdřív zkusit StrongBox, když ho telefon nemá, běžné chráněné úložiště.
+        return try { generate(alias, true) } catch (_: StrongBoxUnavailableException) { generate(alias, false) }
+    }
+
+    /** Kde je klíč uložen: STRONGBOX, TEE, SOFTWARE, nebo null (zatím žádný). */
+    fun keyLevel(): String? = try {
+        val k = keyStore().getKey(alias, null) as? SecretKey ?: return null
+        val info = SecretKeyFactory.getInstance(k.algorithm, "AndroidKeyStore").getKeySpec(k, KeyInfo::class.java) as KeyInfo
+        if (Build.VERSION.SDK_INT >= 31) when (info.securityLevel) {
+            KeyProperties.SECURITY_LEVEL_STRONGBOX -> "STRONGBOX"
+            KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT -> "TEE"
+            else -> "SOFTWARE"
+        } else @Suppress("DEPRECATION") if (info.isInsideSecureHardware) "TEE" else "SOFTWARE"
+    } catch (_: Exception) { null }
+
+    /**
+     * Přesune šifrovací klíč do StrongBoxu (samostatný bezpečnostní čip), pokud ho telefon má a klíč tam ještě není.
+     * Volat jen do 60 s po ověření. Bezpečné: nový klíč se použije až po úspěšném zašifrování všeho,
+     * starý se smaže až potom. Vrací true, pokud se přesunulo.
+     */
+    fun migrateToStrongBox(hasStrongBox: Boolean): Boolean {
+        if (!hasStrongBox || !hasSeed() || keyLevel() == "STRONGBOX") return false
+        val seed = loadSeed()
+        val names = prefs.all.keys.filter { it.startsWith("x_") && !it.endsWith("_iv") }.map { it.removePrefix("x_") }
+        val extras = names.associateWith { loadExtra(it) }
+        val newAlias = if (alias == "seed_key_sb1") "seed_key_sb2" else "seed_key_sb1"
+        keyStore().deleteEntry(newAlias)
+        val nk = try { generate(newAlias, true) } catch (_: StrongBoxUnavailableException) { return false }
+        fun enc(v: String): Pair<String, String> {
+            val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, nk) }
+            return Base64.encodeToString(c.doFinal(v.toByteArray()), Base64.NO_WRAP) to Base64.encodeToString(c.iv, Base64.NO_WRAP)
+        }
+        val e = prefs.edit()
+        enc(seed).let { (ct, iv) -> e.putString("seed", ct).putString("iv", iv) }
+        extras.forEach { (n, v) -> if (v != null) enc(v).let { (ct, iv) -> e.putString("x_$n", ct).putString("x_${n}_iv", iv) } }
+        e.putString("key_alias", newAlias)
+        if (!e.commit()) { keyStore().deleteEntry(newAlias); return false }
+        val old = alias
+        alias = newAlias
+        try { keyStore().deleteEntry(old) } catch (_: Exception) {}
+        return true
     }
 
     /** Musí se volat do 60 s po úspěšném ověření. */
@@ -80,6 +130,7 @@ class SecureStore(context: Context) {
         prefs.edit()
             .putString("seed", Base64.encodeToString(ct, Base64.NO_WRAP))
             .putString("iv", Base64.encodeToString(c.iv, Base64.NO_WRAP))
+            .putString("key_alias", alias)
             .commit()
     }
 
@@ -158,7 +209,7 @@ class SecureStore(context: Context) {
     fun wipe() {
         prefs.edit().clear().commit()
         try {
-            KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.apply { deleteEntry(alias); deleteEntry(canaryAlias); deleteEntry(bgAlias) }
+            KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.apply { deleteEntry(alias); deleteEntry("seed_key_v1"); deleteEntry("seed_key_sb1"); deleteEntry("seed_key_sb2"); deleteEntry(canaryAlias); deleteEntry(bgAlias) }
         } catch (_: Exception) {}
     }
 }

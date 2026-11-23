@@ -1,0 +1,1 @@
+Šifrovací klíč peněženky se přesune do StrongBoxu (samostatný bezpečnostní čip), pokud ho telefon má; stav v Nastavení → Bezpečnost.

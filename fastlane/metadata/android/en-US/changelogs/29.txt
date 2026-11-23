@@ -1,0 +1,1 @@
+The wallet encryption key moves into StrongBox (the phone's separate security chip) when available; status in Settings → Security.

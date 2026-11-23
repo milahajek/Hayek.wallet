@@ -959,6 +959,17 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
             HorizontalDivider(Modifier.padding(vertical = 20.dp))
             Text(L("Bezpečnost", "Security"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
+            vm.keyLevel?.let { lvl ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+                    Icon(Icons.Default.Shield, null, tint = if (lvl == "STRONGBOX") Color(0xFF2E9E5B) else MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(8.dp))
+                    Text(when (lvl) {
+                        "STRONGBOX" -> L("Klíč peněženky je ve StrongBoxu – samostatném bezpečnostním čipu telefonu.", "The wallet key is in StrongBox – the phone's separate security chip.")
+                        "TEE" -> L("Klíč peněženky je v chráněné části procesoru (TEE). Telefon StrongBox nemá.", "The wallet key is in the processor's protected area (TEE). This phone has no StrongBox.")
+                        else -> L("Klíč peněženky je chráněn jen softwarově.", "The wallet key is protected by software only.")
+                    }, fontSize = 13.sp)
+                }
+            }
             if (!vm.watchOnly) GlassButton(onClick = { vm.screen = Screen.Seed }, Modifier.fillMaxWidth()) { Text(L("Zobrazit obnovovací frázi", "Show recovery phrase")) }
             GlassButton(onClick = { vm.screen = Screen.Export }, Modifier.fillMaxWidth()) { Text(L("Veřejný klíč pro sledování (export)", "Public key for watching (export)")) }
             GlassButton(onClick = { vm.lockApp() }, Modifier.fillMaxWidth()) { Text(L("Zamknout teď", "Lock now")) }
