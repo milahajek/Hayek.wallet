@@ -59,18 +59,52 @@ fun TagMenu(current: CoinTag?, enabled: Boolean = true, onPick: (CoinTag?) -> Un
     }
 }
 
-/** Rozpad zůstatku podle značek – jen pokud je něco označené. */
-@OptIn(ExperimentalLayoutApi::class)
+/** Rozdělení zůstatku na Bez KYC / KYC (+ neoznačené) – jen pokud je něco označené. */
 @Composable
 fun TagBalances(vm: WalletViewModel) {
     @Suppress("UNUSED_VARIABLE") val v = vm.tagsVersion
     val groups = vm.coins.groupBy { vm.coinTagKey(it) }.mapValues { (_, l) -> l.sumOf { it.valueSat } }
     if (groups.keys.all { it == CoinTag.NONE }) return
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally), verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
-        listOf(CoinTag.NOKYC.key, CoinTag.KYC.key, CoinTag.NONE).filter { it in groups }.forEach { k ->
-            TagPill(k, "${CoinTag.labelOf(k)} · ${vm.amount(groups.getValue(k))}")
+    val no = groups[CoinTag.NOKYC.key] ?: 0L
+    val kyc = groups[CoinTag.KYC.key] ?: 0L
+    val none = groups[CoinTag.NONE] ?: 0L
+    val total = (no + kyc + none).coerceAtLeast(1)
+    Column(Modifier.fillMaxWidth().padding(top = 14.dp)) {
+        // poměr skupin
+        if (!vm.hideBalance) Row(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))) {
+            listOf(no to CoinTag.NOKYC.color, kyc to CoinTag.KYC.color, none to CoinTag.UNTAGGED_COLOR).filter { it.first > 0 }.forEach { (v, c) ->
+                Box(Modifier.weight(v.toFloat() / total).fillMaxHeight().background(c))
+            }
         }
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            BalanceTile(CoinTag.NOKYC, no, vm, Modifier.weight(1f))
+            BalanceTile(CoinTag.KYC, kyc, vm, Modifier.weight(1f))
+        }
+        if (none > 0) Row(
+            Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(10.dp)).clickable { vm.openCoins(Screen.Home) }.padding(4.dp),
+            horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(CoinTag.UNTAGGED_COLOR))
+            Spacer(Modifier.width(6.dp))
+            Text("Neoznačené: ${vm.amount(none)} · označit", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun BalanceTile(tag: CoinTag, sat: Long, vm: WalletViewModel, modifier: Modifier) {
+    Column(
+        modifier.clip(RoundedCornerShape(16.dp)).background(tag.color.copy(alpha = 0.10f))
+            .border(1.dp, tag.color.copy(alpha = 0.45f), RoundedCornerShape(16.dp)).padding(vertical = 10.dp, horizontal = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(tag.color))
+            Spacer(Modifier.width(6.dp))
+            Text(tag.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = tag.color)
+        }
+        Text(vm.amount(sat), fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }
 }
 

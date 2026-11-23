@@ -1,0 +1,1 @@
+Balance split into No-KYC and KYC sections with a colour ratio bar; untagged coins link to tagging.
