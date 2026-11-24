@@ -1,0 +1,1 @@
+Více peněženek: např. Kapesní (klíče v telefonu) a Trezor (jen sledování, podpis Coldcardem). Přepínač a celkový součet na hlavní obrazovce, platba „Do mé peněženky“ se přenesením značky KYC / bez KYC, upozornění na platby pro všechny peněženky. Stávající peněženka a její data zůstávají beze změny.

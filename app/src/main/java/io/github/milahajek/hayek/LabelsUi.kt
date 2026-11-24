@@ -38,6 +38,8 @@ fun LabelsSection(vm: WalletViewModel) {
     Text(L("Poznámky k transakcím, značky Bez KYC / KYC a zmrazené mince jsou jen v tomto telefonu – obnovovací slova je neobsahují. ", "Transaction notes, No-KYC / KYC tags and frozen coins exist only on this phone – the recovery words don't contain them. ") +
         L("Zálohujte je do souboru (standard BIP-329, umí ho i Sparrow Wallet).", "Back them up to a file (BIP-329 standard, Sparrow Wallet supports it too)."),
         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (vm.wallets.size > 1) Text(L("Platí pro zobrazenou peněženku „${vm.walletName(vm.activeId)}“ – každá peněženka se zálohuje zvlášť.", "Applies to the shown wallet „${vm.walletName(vm.activeId)}“ – each wallet is backed up separately."),
+        fontSize = 13.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 4.dp))
     val last = vm.lastLabelsBackup
     val status = when {
         vm.labelChanges > 0 -> L("● Od poslední zálohy: ${vm.labelChanges} ${changesWord(vm.labelChanges)}", "● Since last backup: ${vm.labelChanges} ${changesWord(vm.labelChanges)}") + if (last == 0L) L(" (zatím nezálohováno)", " (not backed up yet)") else ""
@@ -64,7 +66,7 @@ fun LabelsSection(vm: WalletViewModel) {
         onConfirm = { pw ->
             askExport = false; exportPw = pw
             val day = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            saveLauncher.launch(if (pw.isEmpty()) "hayek-stitky-$day.jsonl" else "hayek-stitky-$day.hayek")
+            saveLauncher.launch((if (vm.wallets.size > 1) "hayek-stitky-${fileSafe(vm.walletName(vm.activeId))}-$day" else "hayek-stitky-$day") + if (pw.isEmpty()) ".jsonl" else ".hayek")
         },
     )
     vm.labelsImportNeedsPassword?.let { uri ->
@@ -181,3 +183,8 @@ fun NotifySection(vm: WalletViewModel) {
         })
     }
 }
+
+/** Název peněženky do jména souboru (bez diakritiky a zvláštních znaků). */
+fun fileSafe(name: String): String =
+    java.text.Normalizer.normalize(name, java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+        .lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifEmpty { "penezenka" }

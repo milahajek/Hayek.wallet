@@ -17,7 +17,7 @@ import androidx.fragment.app.FragmentActivity
  */
 @Composable
 fun FingerprintCheckDialog(vm: WalletViewModel, act: FragmentActivity) {
-    val words = vm.seedWords?.split(" ")
+    val words = vm.checkWords?.split(" ")
     val idx = remember { (words?.indices?.shuffled()?.take(3)?.sorted()) ?: emptyList() }
     val answers = remember { mutableStateMapOf<Int, String>() }
     var wrong by remember { mutableStateOf(false) }
@@ -30,6 +30,7 @@ fun FingerprintCheckDialog(vm: WalletViewModel, act: FragmentActivity) {
                 Text(L("Od posledního použití někdo přidal nebo odebral otisk prstu. Kdo zná váš PIN, mohl by si tak přidat vlastní otisk a odesílat vaše peníze.", "Since the last use someone added or removed a fingerprint. Whoever knows your PIN could add their own fingerprint this way and send your money."), fontSize = 14.sp)
                 if (words != null) {
                     Text(L("Pokud jste otisk měnil vy, potvrďte to zadáním těchto slov ze své zálohy:", "If you changed the fingerprint yourself, confirm it by entering these words from your backup:"), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    if (vm.wallets.size > 1) vm.checkWalletId?.let { id -> Text(L("Slova peněženky „${vm.walletName(id)}“.", "Words of the wallet „${vm.walletName(id)}“."), fontSize = 13.sp) }
                     IncognitoKeyboard {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             idx.forEach { i ->

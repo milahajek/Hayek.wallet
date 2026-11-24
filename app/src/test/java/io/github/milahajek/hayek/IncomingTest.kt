@@ -18,4 +18,10 @@ class IncomingTest {
         assertEquals(d.substringBefore("#"), e)
         assertEquals(d.substringBefore("#").replace("/0/*)", "/1/*)"), i)
     }
+
+    @org.junit.Test fun entriesRoundTrip() {
+        val l = listOf(IncomingNotifier.Entry("w1", "Kapesní", "wpkh([73c5da0a/84h/0h/0h]xpub/0/*)"), IncomingNotifier.Entry("w2", "Trezor", "wpkh(xpub2/0/*)"))
+        org.junit.Assert.assertEquals(l, IncomingNotifier.fromJson(IncomingNotifier.toJson(l)))
+        org.junit.Assert.assertTrue(IncomingNotifier.fromJson("nesmysl").isEmpty())
+    }
 }

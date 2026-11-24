@@ -154,15 +154,16 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
     fun back() {
         when {
             screen is Screen.Intro -> vm.finishIntro(screen.back)
+            screen == Screen.Welcome && vm.adding -> vm.cancelAddWallet()
             screen == Screen.Coins -> vm.screen = vm.coinsReturn
             screen == Screen.Export || screen == Screen.Seed || screen == Screen.LnSetup -> { vm.revealSeed = false; vm.screen = Screen.Settings }
             screen == Screen.LnPay || screen == Screen.LnReceive -> vm.openLightning()
-            screen in inWallet -> { vm.revealSeed = false; vm.screen = if (vm.isOpen) Screen.Home else if (vm.store.hasSeed()) Screen.Locked else Screen.Welcome }
+            screen in inWallet -> { vm.revealSeed = false; vm.screen = if (vm.isOpen) Screen.Home else if (vm.hasWallet) Screen.Locked else Screen.Welcome }
             screen is Screen.Verify -> vm.screen = Screen.ShowSeed(screen.words)
             setup -> vm.screen = Screen.Welcome
         }
     }
-    if (screen in inWallet || setup || screen is Screen.Intro) BackHandler { back() }
+    if (screen in inWallet || setup || screen is Screen.Intro || (screen == Screen.Welcome && vm.adding)) BackHandler { back() }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -189,11 +190,12 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                                 withStyle(SpanStyle(fontWeight = FontWeight.Light)) { append(" Wallet") }
                             })
                         }
-                        val sub = when (vm.connected) {
+                        val wName = if (vm.wallets.size > 1 && vm.isOpen && screen != Screen.Welcome) vm.activeWallet?.let { vm.walletName(it) + " · " } ?: "" else ""
+                        val sub = wName + when (vm.connected) {
                             true -> L("● připojeno k vašemu uzlu", "● connected to your node")
                             false -> L("● uzel nedostupný", "● node unreachable")
                             null -> L("Bitcoin mainnet · skutečné peníze", "Bitcoin mainnet · real money")
-                        } + if (vm.watchOnly) L(" · jen sledování", " · watch-only") else ""
+                        } + if (vm.watchOnly && wName.isEmpty()) L(" · jen sledování", " · watch-only") else ""
                         Text(sub, fontSize = 12.sp, color = when (vm.connected) {
                             true -> Color(0xFF2E9E4F); false -> MaterialTheme.colorScheme.error; null -> Orange
                         })
@@ -307,7 +309,15 @@ fun WelcomeScreen(vm: WalletViewModel) {
             withStyle(SpanStyle(fontWeight = FontWeight.Light)) { append(" Wallet") }
         }, fontSize = 30.sp)
         Spacer(Modifier.height(8.dp))
-        Text(
+        if (vm.adding) {
+            Text(L("Přidat další peněženku", "Add another wallet"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                L("Kapesní peněženka: nová z kostek nebo obnova ze slov – klíče budou v telefonu.\nTrezor: „Jen sledovat“ a načtěte veřejný klíč z Coldcardu přes NFC – klíče zůstanou na Coldcardu, telefon jen připravuje platby k podpisu.",
+                    "Pocket wallet: new from dice or restore from words – the keys will be on the phone.\nVault: „Watch-only“ and load the public key from your Coldcard via NFC – the keys stay on the Coldcard, the phone only prepares payments for signing."),
+                textAlign = TextAlign.Center, fontSize = 14.sp
+            )
+        } else Text(
             L("Pracuje se skutečnými bitcoiny a připojuje se jen k vašemu vlastnímu uzlu. Používejte ji jen na malé částky.", "It works with real bitcoin and connects only to your own node. Use it only for small amounts."),
             textAlign = TextAlign.Center
         )
@@ -323,11 +333,12 @@ fun WelcomeScreen(vm: WalletViewModel) {
         TextButton(onClick = { vm.screen = Screen.WatchImport }, Modifier.fillMaxWidth()) {
             Icon(Icons.Default.Visibility, null); Spacer(Modifier.width(6.dp)); Text(L("Jen sledovat peněženku (zpub / deskriptor)", "Watch-only wallet (zpub / descriptor)"))
         }
-        TextButton(onClick = { vm.screen = Screen.Intro(Screen.Welcome) }, Modifier.fillMaxWidth()) {
+        if (vm.adding) TextButton(onClick = { vm.cancelAddWallet() }, Modifier.fillMaxWidth()) { Text(L("Zpět do peněženky", "Back to wallet")) }
+        else TextButton(onClick = { vm.screen = Screen.Intro(Screen.Welcome) }, Modifier.fillMaxWidth()) {
             Icon(Icons.Default.School, null); Spacer(Modifier.width(6.dp)); Text(L("Průvodce – proč kostky a jak na to", "Guide – why dice and how it works"))
         }
         Spacer(Modifier.height(12.dp))
-        Text(L("Server: ${vm.serverUrl.ifBlank { "zatím nenastaven (zadáte v ⚙ Nastavení)" }}", "Server: ${vm.serverUrl.ifBlank { "not set yet (enter it in ⚙ Settings)" }}"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!vm.adding) Text(L("Server: ${vm.serverUrl.ifBlank { "zatím nenastaven (zadáte v ⚙ Nastavení)" }}", "Server: ${vm.serverUrl.ifBlank { "not set yet (enter it in ⚙ Settings)" }}"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -504,6 +515,7 @@ fun HomeScreen(vm: WalletViewModel, act: FragmentActivity) {
             }
             Spacer(Modifier.height(12.dp))
         }
+        if (vm.wallets.size > 1) { WalletSwitcher(vm); Spacer(Modifier.height(10.dp)) }
         GlassCard(Modifier.fillMaxWidth()) {
             Box(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp).fillMaxWidth().clickable { vm.toggleHideBalance() }, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -598,6 +610,7 @@ fun ReceiveScreen(vm: WalletViewModel, preview: Triple<Boolean, String, String>?
     val bmp = remember(uri) { if (addr.isNotEmpty()) qrBitmap(uri) else null }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(L("Přijmout bitcoiny", "Receive bitcoin"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        WalletBadge(vm)
         Spacer(Modifier.height(16.dp))
         bmp?.let { Image(it.asImageBitmap(), L("QR kód adresy", "Address QR code"), Modifier.size(260.dp).background(Color.White).padding(8.dp)) }
         if (isRequest) {
@@ -688,6 +701,7 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
     })
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text(L("Odeslat", "Send"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        WalletBadge(vm)
         Text(L("K dispozici: ${formatSat(vm.coins.filter { !it.frozen }.sumOf { it.valueSat })}", "Available: ${formatSat(vm.coins.filter { !it.frozen }.sumOf { it.valueSat })}") +
             if (vm.coins.any { it.frozen }) L(" (bez zmrazených)", " (excluding frozen)") else "", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(12.dp))
@@ -711,6 +725,8 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
             supportingText = note?.let { n -> { Text(n) } }
         )
         ContactHint(vm, to)
+        OwnWalletHint(vm, to)
+        if (to.isEmpty()) OwnWalletChips(vm) { a -> to = a; note = null; vm.prepared = null }
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
             value = amount, onValueChange = { amount = it.filter(Char::isDigit); vm.prepared = null },
@@ -955,6 +971,8 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
 
         if (vm.isOpen) {
             HorizontalDivider(Modifier.padding(vertical = 20.dp))
+            WalletsSection(vm, act)
+            HorizontalDivider(Modifier.padding(vertical = 20.dp))
             var showContacts by remember { mutableStateOf(false) }
             GlassButton(onClick = { showContacts = true }, Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.Person, null); Spacer(Modifier.width(6.dp)); Text(L("Adresář (${vm.contacts.size})", "Address book (${vm.contacts.size})"))
@@ -985,7 +1003,9 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
             GlassButton(onClick = { vm.lockApp() }, Modifier.fillMaxWidth()) { Text(L("Zamknout teď", "Lock now")) }
             Spacer(Modifier.height(20.dp))
             GlassButton(onClick = { confirmDelete = true }, Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text(L("Smazat peněženku z telefonu", "Delete wallet from phone")) }
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+                Text(if (vm.wallets.size > 1) L("Smazat peněženku „${vm.walletName(vm.activeId)}“ z telefonu", "Delete wallet „${vm.walletName(vm.activeId)}“ from phone") else L("Smazat peněženku z telefonu", "Delete wallet from phone"))
+            }
         }
 
         HorizontalDivider(Modifier.padding(vertical = 20.dp))
@@ -1022,8 +1042,12 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text(L("Smazat peněženku?", "Delete wallet?")) },
-            text = { Text(L("Peněženka zmizí z telefonu. Bitcoiny zůstanou na blockchainu, ale dostanete se k nim JEN pomocí zapsaných slov. Máte je opravdu zapsaná?", "The wallet will disappear from the phone. The bitcoin stays on the blockchain, but you can reach it ONLY with the written words. Do you really have them written down?")) },
+            title = { Text(if (vm.wallets.size > 1) L("Smazat peněženku „${vm.walletName(vm.activeId)}“?", "Delete wallet „${vm.walletName(vm.activeId)}“?") else L("Smazat peněženku?", "Delete wallet?")) },
+            text = { Text(
+                (if (vm.watchOnly) L("Sledovací peněženka zmizí z telefonu. Klíče zůstávají na hardwarové peněžence (Coldcardu), sledování obnovíte novým načtením veřejného klíče.", "The watch-only wallet will disappear from the phone. The keys stay on the hardware wallet (Coldcard); you can watch it again by loading the public key.")
+                else L("Peněženka zmizí z telefonu. Bitcoiny zůstanou na blockchainu, ale dostanete se k nim JEN pomocí zapsaných slov. Máte je opravdu zapsaná?", "The wallet will disappear from the phone. The bitcoin stays on the blockchain, but you can reach it ONLY with the written words. Do you really have them written down?")) +
+                if (vm.wallets.size > 1) L("\n\nOstatní peněženky zůstanou beze změny.", "\n\nThe other wallets stay unchanged.") else ""
+            ) },
             confirmButton = { TextButton(onClick = { confirmDelete = false; act.auth(vm, L("Smazat peněženku", "Delete wallet"), strong = true) { vm.deleteWallet() } }) { Text(L("Smazat", "Delete")) } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(L("Zrušit", "Cancel")) } }
         )
@@ -1034,6 +1058,7 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
 fun SeedScreen(vm: WalletViewModel, act: FragmentActivity) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text(L("Obnovovací fráze", "Recovery phrase"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        WalletBadge(vm)
         Text(L("Nikomu ji neukazujte. Nikdo (ani podpora) ji po vás nikdy nepotřebuje.", "Don't show it to anyone. Nobody (not even support) will ever need it from you."))
         Spacer(Modifier.height(12.dp))
         if (vm.revealSeed) SeedGrid(vm.seedWords ?: "")
@@ -1211,6 +1236,7 @@ fun ExportScreen(vm: WalletViewModel) {
     val bmp = remember(desc) { if (desc.isNotEmpty()) qrBitmap(desc, 800) else null }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(L("Veřejný klíč pro sledování", "Public key for watching"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        WalletBadge(vm)
         Spacer(Modifier.height(6.dp))
         Text(
             L("Tento deskriptor vložte do jiné aplikace (Sparrow, tato aplikace v režimu sledování…) a uvidíte tam zůstatek bez možnosti utrácet. ", "Paste this descriptor into another app (Sparrow, this app in watch mode…) to see the balance there without being able to spend. ") +

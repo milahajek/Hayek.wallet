@@ -33,6 +33,9 @@ class SecureStore(context: Context) {
 
     fun hasSeed() = prefs.contains("seed")
 
+    /** Odstraní hlavní slot (když se maže peněženka, která v něm byla, a jiné zůstávají). */
+    fun removeSeed() { prefs.edit().remove("seed").remove("iv").commit() }
+
     // ---------- Údaje pro práci na pozadí (upozornění na platby) ----------
     // Jen VEŘEJNÝ deskriptor (adresy, ne klíče). Šifrovaný klíčem bez ověření otiskem, aby ho šlo
     // přečíst i bez odemčení – chrání před vynesením souboru, ne před aplikací samotnou.
@@ -100,9 +103,9 @@ class SecureStore(context: Context) {
      * starý se smaže až potom. Vrací true, pokud se přesunulo.
      */
     fun migrateToStrongBox(hasStrongBox: Boolean): Boolean {
-        if (!hasStrongBox || !hasSeed() || keyLevel() == "STRONGBOX") return false
-        val seed = loadSeed()
         val names = prefs.all.keys.filter { it.startsWith("x_") && !it.endsWith("_iv") }.map { it.removePrefix("x_") }
+        if (!hasStrongBox || (!hasSeed() && names.isEmpty()) || keyLevel() == "STRONGBOX") return false
+        val seed = if (hasSeed()) loadSeed() else null
         val extras = names.associateWith { loadExtra(it) }
         val newAlias = if (alias == "seed_key_sb1") "seed_key_sb2" else "seed_key_sb1"
         keyStore().deleteEntry(newAlias)
@@ -112,7 +115,7 @@ class SecureStore(context: Context) {
             return Base64.encodeToString(c.doFinal(v.toByteArray()), Base64.NO_WRAP) to Base64.encodeToString(c.iv, Base64.NO_WRAP)
         }
         val e = prefs.edit()
-        enc(seed).let { (ct, iv) -> e.putString("seed", ct).putString("iv", iv) }
+        seed?.let { enc(it).let { (ct, iv) -> e.putString("seed", ct).putString("iv", iv) } }
         extras.forEach { (n, v) -> if (v != null) enc(v).let { (ct, iv) -> e.putString("x_$n", ct).putString("x_${n}_iv", iv) } }
         e.putString("key_alias", newAlias)
         if (!e.commit()) { keyStore().deleteEntry(newAlias); return false }

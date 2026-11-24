@@ -1,0 +1,1 @@
+Multiple wallets: e.g. Pocket (keys on the phone) and Vault (watch-only, signed by Coldcard). Switcher and total on the home screen, „To my wallet“ payments that carry over the KYC / no-KYC tag, payment alerts for all wallets. Your existing wallet and its data stay unchanged.
