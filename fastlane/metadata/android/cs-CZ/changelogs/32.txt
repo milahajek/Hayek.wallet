@@ -1,0 +1,1 @@
+Heslo navíc (passphrase, „25. slovo“) při založení i obnově peněženky – volitelné, se srozumitelným vysvětlením, dvojím zadáním, kontrolou a otiskem peněženky pro ověření při obnově.

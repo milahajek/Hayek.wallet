@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.milahajek.hayek"
         minSdk = 30
         targetSdk = 36
-        versionCode = 31
-        versionName = "1.15.0"
+        versionCode = 32
+        versionName = "1.16.0"
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 

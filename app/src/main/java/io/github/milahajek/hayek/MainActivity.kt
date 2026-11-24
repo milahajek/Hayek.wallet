@@ -46,6 +46,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -428,6 +430,7 @@ fun SeedGrid(words: String) {
 @Composable
 fun ShowSeedScreen(words: String, vm: WalletViewModel) {
     var saved by remember { mutableStateOf(false) }
+    var pp by remember { mutableStateOf<String?>("") }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text(L("Vaše obnovovací fráze", "Your recovery phrase"), fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
@@ -441,7 +444,10 @@ fun ShowSeedScreen(words: String, vm: WalletViewModel) {
             Checkbox(checked = saved, onCheckedChange = { saved = it })
             Text(L("Všech 24 slov mám zapsaných na papíře", "I have written all 24 words on paper"))
         }
-        HayekButton(onClick = { vm.goVerify(words) }, enabled = saved, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+        Spacer(Modifier.height(8.dp))
+        PassphraseSection(confirm = true) { pp = it }
+        Spacer(Modifier.height(12.dp))
+        HayekButton(onClick = { vm.newPassphrase = pp?.ifEmpty { null }; vm.goVerify(words) }, enabled = saved && pp != null, modifier = Modifier.fillMaxWidth().height(52.dp)) {
             Text(L("Pokračovat ke kontrole", "Continue to check"))
         }
     }
@@ -451,6 +457,9 @@ fun ShowSeedScreen(words: String, vm: WalletViewModel) {
 fun VerifyScreen(s: Screen.Verify, vm: WalletViewModel, act: FragmentActivity) {
     val list = s.words.split(" ")
     val answers = remember(s) { mutableStateListOf("", "", "") }
+    val pass = vm.newPassphrase
+    var passAgain by remember(s) { mutableStateOf("") }
+    var showPass by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text(L("Kontrola zálohy", "Backup check"), fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Text(L("Podle svého papíru napište tato slova:", "Using your paper, type these words:"))
@@ -463,12 +472,23 @@ fun VerifyScreen(s: Screen.Verify, vm: WalletViewModel, act: FragmentActivity) {
             )
             Spacer(Modifier.height(8.dp))
         }
+        if (pass != null) {
+            Text(L("A heslo navíc (passphrase) podle svého papíru:", "And the passphrase from your paper:"), fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                value = passAgain, onValueChange = { passAgain = it }, label = { Text(L("Heslo", "Passphrase")) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                visualTransformation = if (showPass) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
+                trailingIcon = { IconButton(onClick = { showPass = !showPass }) { Icon(if (showPass) Icons.Default.VisibilityOff else Icons.Default.Visibility, null) } }
+            )
+        }
         Spacer(Modifier.height(8.dp))
         HayekButton(onClick = {
             val ok = s.positions.indices.all { answers[it] == list[s.positions[it]] }
             if (!ok) vm.message = L("Některé slovo nesedí. Zkontrolujte svůj zápis (vraťte se zpět a porovnejte).", "A word doesn't match. Check what you wrote (go back and compare).")
-            else act.auth(vm, L("Uložit peněženku", "Save wallet")) { vm.saveAndOpen(s.words) }
-        }, enabled = answers.all { it.isNotBlank() } && !vm.busy, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            else if (pass != null && passAgain != pass) vm.message = L("Heslo nesedí s tím, které jste zadali. Zkontrolujte zápis včetně velkých písmen a mezer.", "The passphrase doesn't match the one you entered. Check your note including capitals and spaces.")
+            else act.auth(vm, L("Uložit peněženku", "Save wallet")) { vm.saveAndOpen(Passphrase.pack(s.words, pass)) }
+        }, enabled = answers.all { it.isNotBlank() } && (pass == null || passAgain.isNotEmpty()) && !vm.busy, modifier = Modifier.fillMaxWidth().height(52.dp)) {
             Text(L("Zkontrolovat a uložit", "Check and save"))
         }
     }
@@ -477,6 +497,7 @@ fun VerifyScreen(s: Screen.Verify, vm: WalletViewModel, act: FragmentActivity) {
 @Composable
 fun RestoreScreen(vm: WalletViewModel, act: FragmentActivity) {
     var text by remember { mutableStateOf("") }
+    var pp by remember { mutableStateOf<String?>("") }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text(L("Obnovit peněženku", "Restore wallet"), fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Text(L("Napište 24 (nebo 12) slov oddělených mezerou.", "Type the 24 (or 12) words separated by spaces."))
@@ -486,10 +507,15 @@ fun RestoreScreen(vm: WalletViewModel, act: FragmentActivity) {
             modifier = Modifier.fillMaxWidth().height(180.dp),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false)
         )
+        Spacer(Modifier.height(12.dp))
+        Text(L("Měli jste u peněženky heslo navíc? Zadejte ho přesně (velká/malá písmena, mezery). Kdo ho neměl, nechá vypnuté.",
+            "Did the wallet have a passphrase? Enter it exactly (upper/lower case, spaces). If it didn't, leave this off."), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(6.dp))
+        PassphraseSection(confirm = false) { pp = it }
         Spacer(Modifier.height(16.dp))
         HayekButton(onClick = {
-            vm.checkRestore(text)?.let { w -> act.auth(vm, L("Uložit peněženku", "Save wallet")) { vm.saveAndOpen(w, restored = true) } }
-        }, enabled = text.isNotBlank() && !vm.busy, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(L("Obnovit", "Refresh")) }
+            vm.checkRestore(text)?.let { w -> act.auth(vm, L("Uložit peněženku", "Save wallet")) { vm.saveAndOpen(Passphrase.pack(w, pp), restored = true) } }
+        }, enabled = text.isNotBlank() && pp != null && !vm.busy, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(L("Obnovit", "Restore")) }
     }
 }
 
@@ -1061,7 +1087,28 @@ fun SeedScreen(vm: WalletViewModel, act: FragmentActivity) {
         WalletBadge(vm)
         Text(L("Nikomu ji neukazujte. Nikdo (ani podpora) ji po vás nikdy nepotřebuje.", "Don't show it to anyone. Nobody (not even support) will ever need it from you."))
         Spacer(Modifier.height(12.dp))
-        if (vm.revealSeed) SeedGrid(vm.seedWords ?: "")
+        if (vm.revealSeed) {
+            SeedGrid(vm.seedWords ?: "")
+            vm.seedPassphrase?.let { p ->
+                var showP by remember { mutableStateOf(false) }
+                Spacer(Modifier.height(12.dp))
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Key, null, tint = HayekOrange); Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(L("Heslo navíc (passphrase)", "Passphrase"), fontWeight = FontWeight.SemiBold)
+                            Text(if (showP) "„$p“" else "•".repeat(minOf(p.length, 16)), fontFamily = FontFamily.Monospace)
+                        }
+                        IconButton(onClick = { showP = !showP }) { Icon(if (showP) Icons.Default.VisibilityOff else Icons.Default.Visibility, null) }
+                    }
+                }
+            }
+            vm.walletFingerprint?.let { fp ->
+                Spacer(Modifier.height(8.dp))
+                Text(L("Otisk peněženky: $fp", "Wallet fingerprint: $fp") + if (vm.seedPassphrase != null) L(" – při obnově se slovy a heslem musí vyjít stejný.", " – restoring with the words and passphrase must give the same one.") else "",
+                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         else HayekButton(onClick = { act.auth(vm, L("Zobrazit obnovovací frázi", "Show recovery phrase"), strong = true) { vm.revealSeed = true } }, Modifier.fillMaxWidth()) {
             Icon(Icons.Default.Fingerprint, null); Spacer(Modifier.width(6.dp)); Text(L("Zobrazit slova", "Show words"))
         }

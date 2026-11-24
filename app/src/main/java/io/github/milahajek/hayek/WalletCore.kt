@@ -269,7 +269,9 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
 
     /** true = jen sledování, nemá soukromé klíče, nemůže podepisovat. */
     val watchOnly = secret.startsWith(WATCH_PREFIX)
-    val mnemonicWords: String? = if (watchOnly) null else secret
+    val mnemonicWords: String? = if (watchOnly) null else Passphrase.words(secret)
+    /** Heslo navíc (passphrase), nebo null. */
+    val passphrase: String? = if (watchOnly) null else Passphrase.of(secret)
 
     private val external: Descriptor
     private val internal: Descriptor
@@ -281,7 +283,7 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
             internal = Descriptor(i, NetworkKind.MAIN)
             WatchOnly.requirePublic(external); WatchOnly.requirePublic(internal)
         } else {
-            val secretKey = DescriptorSecretKey(NetworkKind.MAIN, Mnemonic.fromString(secret), null)
+            val secretKey = DescriptorSecretKey(NetworkKind.MAIN, Mnemonic.fromString(mnemonicWords!!), passphrase)
             external = Descriptor.newBip84(secretKey, KeychainKind.EXTERNAL, NetworkKind.MAIN)
             internal = Descriptor.newBip84(secretKey, KeychainKind.INTERNAL, NetworkKind.MAIN)
         }

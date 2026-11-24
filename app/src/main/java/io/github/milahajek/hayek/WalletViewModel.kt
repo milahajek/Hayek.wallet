@@ -469,6 +469,11 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     var pinVersion by mutableStateOf(0)
 
     val seedWords: String? get() = core?.mnemonicWords
+    val seedPassphrase: String? get() = core?.passphrase
+    /** Otisk zobrazené peněženky (u hesla se podle něj pozná, že je zadané správně). */
+    val walletFingerprint: String? get() = Passphrase.fingerprint(runCatching { core?.publicDescriptor() }.getOrNull())
+    /** Heslo navíc pro právě zakládanou peněženku z kostek (jen v paměti do uložení). */
+    var newPassphrase by mutableStateOf<String?>(null)
     /** Peněženka, jejíž slova se ověřují po změně otisků: zobrazená, a když je jen sledovací, první kapesní. */
     val checkWalletId: String? get() = activeId.takeIf { cores[it]?.mnemonicWords != null }
         ?: wallets.firstOrNull { cores[it.id]?.mnemonicWords != null }?.id
@@ -561,7 +566,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         try { syncNow() } finally { syncOthersQuietly() }
     }
 
-    fun startDice() { rolls = ""; screen = Screen.Dice }
+    fun startDice() { rolls = ""; newPassphrase = null; screen = Screen.Dice }
     fun addRoll(n: Int) { rolls += n.toString() }
     fun undoRoll() { rolls = rolls.dropLast(1) }
 
@@ -582,7 +587,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Začít zakládat další peněženku (zpět se jde do aplikace). */
     fun startAddWallet() { adding = true; screen = Screen.Welcome }
-    fun cancelAddWallet() { adding = false; rolls = ""; screen = if (isOpen) Screen.Home else Screen.Welcome }
+    fun cancelAddWallet() { adding = false; rolls = ""; newPassphrase = null; screen = if (isOpen) Screen.Home else Screen.Welcome }
 
     /** Volat až po ověření – uloží zašifrovanou frázi (nebo sledovací klíč) a otevře peněženku. */
     fun saveAndOpen(words: String, restored: Boolean = false) = run {
@@ -624,7 +629,13 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         screen = Screen.Home
         if (restored) offerLabelsImport = true
         refreshNotifyList()
-        if (!first) message = L("Peněženka „${walletName(id)}“ přidána ✔\nMezi peněženkami přepínáte nahoře na hlavní obrazovce. Přejmenovat ji můžete v ⚙ Nastavení.",
+        newPassphrase = null
+        if (Passphrase.of(words) != null) {
+            val fp = Passphrase.fingerprint(withContext(Dispatchers.IO) { c.publicDescriptor() }) ?: "?"
+            message = L("🔑 Peněženka s heslem (passphrase) je uložená.\n\nOtisk peněženky: $fp\nZapište si ho k heslu. Když později zadáte heslo s překlepem, uvidíte jiný otisk a prázdnou peněženku – to je znamení, že heslo nesedí.",
+                "🔑 The wallet with a passphrase is saved.\n\nWallet fingerprint: $fp\nWrite it down next to the passphrase. If you later enter the passphrase with a typo, you'll see a different fingerprint and an empty wallet – that's the sign the passphrase is wrong.") +
+                if (restored) L("\n\nPokud je obnovená peněženka prázdná, nejspíš nesedí heslo (velká/malá písmena, mezery). Smažte ji a obnovte znovu.", "\n\nIf the restored wallet is empty, the passphrase most likely doesn't match (upper/lower case, spaces). Delete it and restore again.") else ""
+        } else if (!first) message = L("Peněženka „${walletName(id)}“ přidána ✔\nMezi peněženkami přepínáte nahoře na hlavní obrazovce. Přejmenovat ji můžete v ⚙ Nastavení.",
             "Wallet „${walletName(id)}“ added ✔\nSwitch between wallets at the top of the home screen. You can rename it in ⚙ Settings.")
         syncNow()
     }
@@ -840,6 +851,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         core = null
         cores.clear(); states.clear(); balances = emptyMap(); ownTarget = null
         if (adding) adding = false
+        newPassphrase = null
         coins = emptyList(); selected = emptySet()
         state = null
         revealSeed = false

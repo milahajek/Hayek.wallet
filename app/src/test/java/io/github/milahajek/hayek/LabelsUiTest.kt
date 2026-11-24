@@ -30,6 +30,8 @@ class LabelsUiTest {
     }
     @Test fun successLn() = shot(6, "success_ln")
     @Test fun successOnchain() = shot(7, "success")
+    @Test fun passphraseInfo() = shot(8, "passphrase_info")
+    @Test fun passphraseOn() = shot(9, "passphrase_on")
     @Test fun dustSection() = shot(3, "dust")
     @Test fun offerAfterRestore() = shot(2, "labels_offer")
     @Test fun changesBadge() = shot(0, "labels_changes") { vm ->
@@ -44,7 +46,9 @@ class LabelsUiTest {
         act.setContent {
             MaterialTheme(lightColorScheme(primary = Color(0xFFF7931A), background = Color(0xFFFCF8F3), surface = Color(0xFFFFFBF6))) {
                 HayekBackground {
-                    if (dialog == 6) SuccessOverlay(Success("Zaplaceno", "4 200 sat", lightning = true)) {}
+                    if (dialog == 9) Column(Modifier.padding(20.dp)) { PassphraseSection(confirm = true, preview = "Kocour Mour 7") {} }
+                    else if (dialog == 8) PassphraseInfoDialog {}
+                    else if (dialog == 6) SuccessOverlay(Success("Zaplaceno", "4 200 sat", lightning = true)) {}
                     else if (dialog == 7) SuccessOverlay(Success("Odesláno", "150 000 sat")) {}
                     else if (dialog == 5) { Column(Modifier.padding(20.dp)) { ContactHint(vm, "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g") }; ContactsDialog(vm, onDismiss = {}, onPick = {}) }
                     else if (dialog == 4) ReceiveScreen(vm, Triple(true, "150000", "Oběd s bráchou")) else Column(Modifier.padding(20.dp)) {

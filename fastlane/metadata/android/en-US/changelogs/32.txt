@@ -1,0 +1,1 @@
+Optional passphrase („25th word“) when creating or restoring a wallet – with a clear explanation, double entry, a check step and the wallet fingerprint to verify restores.
