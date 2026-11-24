@@ -1,0 +1,1 @@
+Podepisování Coldcardem: sledovací peněženka připraví platbu, Coldcard ji podepíše (NFC přiložením nebo přes paměťovou kartu) a Hayek ověří, že je to přesně připravená transakce, a odešle ji přes váš uzel. Import deskriptoru z Coldcardu přes NFC.

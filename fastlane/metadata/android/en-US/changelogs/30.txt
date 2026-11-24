@@ -1,0 +1,1 @@
+Coldcard signing: the watch-only wallet prepares a payment, the Coldcard signs it (NFC tap or memory card), Hayek verifies it is exactly the prepared transaction and broadcasts it via your node. Import the descriptor from the Coldcard via NFC.

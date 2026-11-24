@@ -560,8 +560,19 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun broadcast() = run {
         val c = core ?: return@run
         val p = prepared ?: return@run
+        sendWith(p) { lock.withLock { withContext(Dispatchers.IO) { c.signAndBroadcast(p) } } }
+    }
+
+    /** Odeslání transakce podepsané hardwarovou peněženkou (Coldcard) – ověří se, že je to přesně připravená platba. */
+    fun broadcastSigned(data: ByteArray) = run {
+        val c = core ?: return@run
+        val p = prepared ?: return@run
+        sendWith(p) { lock.withLock { withContext(Dispatchers.IO) { c.broadcastSigned(p, data) } } }
+    }
+
+    private suspend fun sendWith(p: PreparedTx, send: suspend () -> String) {
         try {
-            val txid = lock.withLock { withContext(Dispatchers.IO) { c.signAndBroadcast(p) } }
+            val txid = send()
             // Drobné zdědí značku použitých mincí.
             combineTags(inputTags(p))?.let { tagPrefs.edit().putString("t:$txid", it.key).apply(); tagsVersion++; labelChanged() }
             selected = emptySet()
@@ -572,6 +583,28 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             // Ať to dopadlo jakkoli, nepřipravená transakce se nesmí odeslat podruhé a stav se musí načíst z uzlu.
             prepared = null
             runCatching { syncNow() }
+        }
+    }
+
+    /** Nepodepsaná transakce pro Coldcard (binární PSBT). */
+    fun psbtForSigning(): ByteArray? = prepared?.let { p -> core?.psbtBytes(p) }
+
+    /** Má sledovací peněženka „otisk“ hardwarové peněženky? Bez něj Coldcard transakci nepozná jako svou. */
+    val hasKeyOrigin: Boolean get() = runCatching { core?.publicDescriptor()?.contains("[") }.getOrNull() == true
+
+    fun savePsbtFile(uri: android.net.Uri) = run {
+        val data = psbtForSigning() ?: return@run
+        withContext(Dispatchers.IO) { getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use { it.write(data) } }
+        message = L("PSBT uloženo ✔\nNa Coldcardu: Ready To Sign. Podepsaný soubor (.txn nebo -signed.psbt) pak načtěte tlačítkem „Načíst podepsaný soubor“.",
+            "PSBT saved ✔\nOn the Coldcard: Ready To Sign. Then load the signed file (.txn or -signed.psbt) with „Load signed file“.")
+    }
+
+    fun loadSignedFile(uri: android.net.Uri) {
+        viewModelScope.launch {
+            val data = try {
+                withContext(Dispatchers.IO) { getApplication<Application>().contentResolver.openInputStream(uri)!!.use { it.readBytes() } }
+            } catch (e: Exception) { message = e.message; return@launch }
+            broadcastSigned(data)
         }
     }
 

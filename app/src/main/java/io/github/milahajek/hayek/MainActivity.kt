@@ -526,12 +526,12 @@ fun HomeScreen(vm: WalletViewModel, act: FragmentActivity) {
             HayekButton(onClick = { vm.screen = Screen.Receive }, Modifier.weight(1f).height(52.dp)) {
                 Icon(Icons.Default.CallReceived, null); Spacer(Modifier.width(6.dp)); Text(L("Přijmout", "Receive"))
             }
-            if (!vm.watchOnly) HayekButton(onClick = { vm.openSend() }, Modifier.weight(1f).height(52.dp)) {
+            HayekButton(onClick = { vm.openSend() }, Modifier.weight(1f).height(52.dp)) {
                 Icon(Icons.Default.CallMade, null); Spacer(Modifier.width(6.dp)); Text(L("Odeslat", "Send"))
             }
         }
         if (vm.watchOnly) Text(
-            L("Jen sledování: vidíte zůstatek a vytváříte adresy, ale odesílat nelze (telefon nemá soukromé klíče).", "Watch-only: you see the balance and can create addresses, but can't send (the phone has no private keys)."),
+            L("Jen sledování: telefon nemá soukromé klíče. Platby připraví a podepíšete je hardwarovou peněženkou (Coldcard přes NFC nebo kartu).", "Watch-only: the phone holds no private keys. It prepares payments and you sign them with a hardware wallet (Coldcard via NFC or memory card)."),
             fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp)
         )
         GlassButton(onClick = { vm.openCoins(Screen.Home) }, Modifier.fillMaxWidth().padding(top = 8.dp)) {
@@ -769,7 +769,17 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
                 }
             }
             Spacer(Modifier.height(12.dp))
-            HayekButton(onClick = { act.auth(vm, L("Potvrdit platbu ${formatSat(p.amountSat)}", "Confirm payment ${formatSat(p.amountSat)}"), strong = true) { vm.broadcast() } },
+            var coldcard by remember { mutableStateOf(false) }
+            if (coldcard) ColdcardSignDialog(vm) { coldcard = false }
+            if (vm.watchOnly) {
+                if (!vm.hasKeyOrigin) Text(L("⚠ Sledovací peněženka byla načtena bez otisku hardwarové peněženky (jen zpub). Coldcard takovou transakci nemusí přijmout – načtěte raději deskriptor z Coldcardu.",
+                    "⚠ This watch-only wallet was imported without the hardware wallet fingerprint (zpub only). The Coldcard may reject the transaction – import the descriptor from the Coldcard instead."),
+                    color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
+                HayekButton(onClick = { coldcard = true },
+                    enabled = !vm.busy && (!mixesNoKyc(inputTags) || mixAck), modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                    Icon(Icons.Default.Contactless, null); Spacer(Modifier.width(6.dp)); Text(L("Podepsat Coldcardem", "Sign with Coldcard"))
+                }
+            } else HayekButton(onClick = { act.auth(vm, L("Potvrdit platbu ${formatSat(p.amountSat)}", "Confirm payment ${formatSat(p.amountSat)}"), strong = true) { vm.broadcast() } },
                 enabled = !vm.busy && (!mixesNoKyc(inputTags) || mixAck), modifier = Modifier.fillMaxWidth().height(52.dp)) {
                 Icon(Icons.Default.Fingerprint, null); Spacer(Modifier.width(6.dp)); Text(L("Podepsat a odeslat", "Sign and send"))
             }
@@ -1068,6 +1078,8 @@ fun WatchImportScreen(vm: WalletViewModel, act: FragmentActivity) {
     val ctx = LocalContext.current
     var text by remember { mutableStateOf("") }
     var scanning by remember { mutableStateOf(false) }
+    var nfcImport by remember { mutableStateOf(false) }
+    if (nfcImport) ColdcardImportDialog(onDismiss = { nfcImport = false }) { text = it; nfcImport = false }
     if (scanning) QrScanDialog(L("Načíst veřejný klíč", "Scan public key"), onDismiss = { scanning = false }, onResult = { raw ->
         scanning = false
         if (raw.trim().lowercase().startsWith("ur:")) vm.message =
@@ -1078,7 +1090,7 @@ fun WatchImportScreen(vm: WalletViewModel, act: FragmentActivity) {
         Text(L("Jen sledovat peněženku", "Watch a wallet"), fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Text(
             L("Vložte veřejný klíč (zpub, ypub, xpub) nebo deskriptor z jiné peněženky – třeba z hardwarové peněženky nebo ze Sparrow. ", "Paste a public key (zpub, ypub, xpub) or a descriptor from another wallet – e.g. a hardware wallet or Sparrow. ") +
-                L("Uvidíte zůstatek, transakce a mince a můžete vytvářet přijímací adresy. Utrácet nejde, v telefonu nebudou žádné soukromé klíče.", "You'll see the balance, transactions and coins and can create receive addresses. Spending isn't possible, the phone holds no private keys."),
+                L("Uvidíte zůstatek, transakce a mince a můžete vytvářet přijímací adresy. V telefonu nebudou žádné soukromé klíče – platby podepíšete Coldcardem.", "You'll see the balance, transactions and coins and can create receive addresses. The phone holds no private keys – you sign payments with the Coldcard."),
             fontSize = 14.sp
         )
         Spacer(Modifier.height(12.dp))
@@ -1093,6 +1105,12 @@ fun WatchImportScreen(vm: WalletViewModel, act: FragmentActivity) {
                 }
             }
         )
+        GlassButton(onClick = { nfcImport = true }, Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Icon(Icons.Default.Contactless, null); Spacer(Modifier.width(6.dp)); Text(L("Načíst z Coldcardu (NFC)", "Import from Coldcard (NFC)"))
+        }
+        Text(L("Pro podepisování Coldcardem použijte deskriptor z Coldcardu (obsahuje otisk [xxxxxxxx/84h/0h/0h]), ne samotný zpub.",
+            "For signing with a Coldcard use the descriptor from the Coldcard (it includes the fingerprint [xxxxxxxx/84h/0h/0h]), not just the zpub."),
+            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
         Spacer(Modifier.height(16.dp))
         HayekButton(onClick = {
             vm.checkWatch(text)?.let { secret -> act.auth(vm, L("Uložit sledovací peněženku", "Save watch-only wallet")) { vm.saveAndOpen(secret) } }
@@ -1108,7 +1126,7 @@ fun CoinsScreen(vm: WalletViewModel) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
             Text(L("Mince (UTXO)", "Coins (UTXO)"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Text(
-                (if (vm.watchOnly) L("Přehled nevyužitých výstupů. ❄ = zmrazená mince.", "Overview of unspent outputs. ❄ = frozen coin.")
+                (if (false) ""
                 else L("Zaškrtněte mince, které se mají v příští platbě utratit. ❄ zmrazí minci – nikdy se nepoužije, dokud ji nerozmrazíte.", "Tick the coins to spend in the next payment. ❄ freezes a coin – it's never used until you unfreeze it.")) +
                     L(" Štítkem označíte původ mince (Bez KYC / KYC), aby se omylem nesmíchaly.", " The tag marks a coin's origin (No KYC / KYC) so they don't get mixed by accident."),
                 fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1121,9 +1139,9 @@ fun CoinsScreen(vm: WalletViewModel) {
                 val tag = vm.coinTag(c)
                 ListItem(
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable(enabled = !vm.watchOnly && !c.frozen) { vm.toggleSelect(c.id) },
+                    modifier = Modifier.clickable(enabled = !c.frozen) { vm.toggleSelect(c.id) },
                     leadingContent = {
-                        if (!vm.watchOnly) Checkbox(checked = c.id in vm.selected, enabled = !c.frozen, onCheckedChange = { vm.toggleSelect(c.id) })
+                        Checkbox(checked = c.id in vm.selected, enabled = !c.frozen, onCheckedChange = { vm.toggleSelect(c.id) })
                     },
                     headlineContent = {
                         Text(formatSat(c.valueSat), fontWeight = FontWeight.SemiBold,
@@ -1158,7 +1176,7 @@ fun CoinsScreen(vm: WalletViewModel) {
                 HorizontalDivider()
             }
         }
-        if (!vm.watchOnly) GlassCard(Modifier.padding(10.dp)) {
+        GlassCard(Modifier.padding(10.dp)) {
             Column(Modifier.fillMaxWidth().padding(16.dp)) {
                 Text(
                     if (sel.isEmpty()) L("Nic nevybráno – platba vybere mince automaticky.", "Nothing selected – the payment picks coins automatically.")

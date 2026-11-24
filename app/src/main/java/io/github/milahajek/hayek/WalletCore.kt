@@ -386,7 +386,7 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
      * @param avoid mince, které automatický výběr nesmí použít (jiná skupina KYC / bez KYC).
      */
     fun prepare(to: String, amountSat: Long, feeRateSatVb: Long, sendAll: Boolean, selected: Set<String> = emptySet(), avoid: Set<String> = emptySet()): PreparedTx {
-        check(!watchOnly) { L("Sledovací peněženka nemůže odesílat.", "A watch-only wallet can't send.") }
+        // Sledovací peněženka platbu připravit může – podepíše ji hardwarová peněženka (Coldcard).
         val address = try {
             Address(to.trim(), NETWORK)
         } catch (e: Exception) {
@@ -426,6 +426,30 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
         check(!watchOnly) { L("Sledovací peněženka nemůže podepisovat.", "A watch-only wallet can't sign.") }
         check(wallet.sign(p.psbt)) { L("Transakci se nepodařilo podepsat", "Couldn't sign the transaction") }
         val tx = p.psbt.extractTx()
+        return broadcastAndApply(tx)
+    }
+
+    /** Nepodepsaná transakce pro hardwarovou peněženku (PSBT, binárně podle BIP-174). */
+    fun psbtBytes(p: PreparedTx): ByteArray = java.util.Base64.getDecoder().decode(p.psbt.serialize())
+
+    /** TXID připravené platby – podpis ho nemění (u SegWitu nepatří podpisy do TXID). */
+    fun preparedTxid(p: PreparedTx): String = p.psbt.extractTxUncheckedFeeRate().computeTxid().toString()
+
+    /**
+     * Přijme podepsanou transakci z hardwarové peněženky (hotová transakce .txn, nebo podepsané PSBT –
+     * binárně, base64 i hex), ověří, že je to PŘESNĚ připravená platba, a odešle ji přes váš uzel.
+     */
+    fun broadcastSigned(p: PreparedTx, data: ByteArray): String {
+        val tx = Bip174.parseSigned(data) { b64 ->
+            val signed = Psbt(b64)
+            val r = signed.finalize()
+            check(r.couldFinalize) { L("Podepsaná transakce není kompletní (chybí podpis).", "The signed transaction is incomplete (a signature is missing).") }
+            r.psbt.extractTx()
+        }
+        check(tx.computeTxid().toString() == preparedTxid(p)) {
+            L("Podepsaná transakce NEODPOVÍDÁ připravené platbě – neodesláno. Zkuste podepsat znovu.",
+                "The signed transaction DOES NOT match the prepared payment – not sent. Try signing again.")
+        }
         return broadcastAndApply(tx)
     }
 
