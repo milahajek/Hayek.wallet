@@ -109,7 +109,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     fun walletName(w: WalletInfo): String = w.name.ifBlank {
         val same = wallets.filter { it.kind == w.kind }
-        val base = if (w.isWatch) L("Trezor", "Vault") else L("Kapesní", "Pocket")
+        val base = if (w.isWatch) L("Chlaďák", "Cold storage") else L("Kapesní", "Pocket")
         if (same.size > 1 && same.indexOf(w) > 0) "$base ${same.indexOf(w) + 1}" else base
     }
     fun walletName(id: String): String = wallets.find { it.id == id }?.let { walletName(it) } ?: ""
@@ -635,7 +635,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         }
         withContext(Dispatchers.IO) { if (first) store.saveSeed(words) else store.saveExtra(slot, words) }
         keyLevel = withContext(Dispatchers.IO) { store.keyLevel() }
-        val base = if (kind == "watch") L("Trezor", "Vault") else L("Kapesní", "Pocket")
+        val base = if (kind == "watch") L("Chlaďák", "Cold storage") else L("Kapesní", "Pocket")
         val taken = wallets.map { walletName(it) }.toSet()
         val name = if (first) "" else generateSequence(1) { it + 1 }.map { if (it == 1) base else "$base $it" }.first { it !in taken }
         // Nová peněženka začíná s čistými poznámkami a značkami.

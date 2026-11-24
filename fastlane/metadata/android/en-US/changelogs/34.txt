@@ -1,0 +1,1 @@
+The watch-only Coldcard wallet is now called „Cold storage“ by default.

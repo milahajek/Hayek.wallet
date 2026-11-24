@@ -75,8 +75,8 @@ fun WelcomeScreen(vm: WalletViewModel) {
             Text(L("Přidat další peněženku", "Add another wallet"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(6.dp))
             Text(
-                L("Kapesní peněženka: nová z kostek nebo obnova ze slov – klíče budou v telefonu.\nTrezor: „Jen sledovat“ a načtěte veřejný klíč z Coldcardu přes NFC – klíče zůstanou na Coldcardu, telefon jen připravuje platby k podpisu.",
-                    "Pocket wallet: new from dice or restore from words – the keys will be on the phone.\nVault: „Watch-only“ and load the public key from your Coldcard via NFC – the keys stay on the Coldcard, the phone only prepares payments for signing."),
+                L("Kapesní peněženka: nová z kostek nebo obnova ze slov – klíče budou v telefonu.\nChlaďák (úspory na Coldcardu): „Jen sledovat“ a načtěte veřejný klíč z Coldcardu přes NFC – klíče zůstanou na Coldcardu, telefon jen připravuje platby k podpisu.",
+                    "Pocket wallet: new from dice or restore from words – the keys will be on the phone.\nCold storage (savings on a Coldcard): „Watch-only“ and load the public key from your Coldcard via NFC – the keys stay on the Coldcard, the phone only prepares payments for signing."),
                 textAlign = TextAlign.Center, fontSize = 14.sp
             )
         } else Text(

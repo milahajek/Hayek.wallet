@@ -1,0 +1,1 @@
+Sledovací peněženka pro Coldcard se teď výchozím názvem jmenuje „Chlaďák“ (cold storage) – aby se nepletla se značkou Trezor.

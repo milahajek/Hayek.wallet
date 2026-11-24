@@ -85,7 +85,7 @@ class PromoTest {
     @Test fun p8_receive() = shoot("p8_receive") { base(it); tags(it); it.setAddressTag(it.state!!.address, CoinTag.NOKYC); it.screen = Screen.Receive }
     @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
     @Test fun p9_home_tags() = shoot("p9_home_tags") { base(it); tags(it); it.screen = Screen.Home }
-    private val two = listOf(WalletInfo("w1", "", "seed", "hot"), WalletInfo("w2", "Trezor (Coldcard)", "wallet_w2", "watch"))
+    private val two = listOf(WalletInfo("w1", "", "seed", "hot"), WalletInfo("w2", "Chlaďák", "wallet_w2", "watch"))
     private fun multi(vm: WalletViewModel, active: String = "w1") = vm.previewWallets(two, mapOf("w1" to 2_797_009L, "w2" to 41_250_000L), active)
     @Test fun p10_wallets_home() = shoot("p10_wallets_home") { base(it); tags(it); multi(it); it.screen = Screen.Home }
     @Test fun p11_wallets_vault() = shoot("p11_wallets_vault") { base(it); multi(it, "w2"); it.screen = Screen.Home }

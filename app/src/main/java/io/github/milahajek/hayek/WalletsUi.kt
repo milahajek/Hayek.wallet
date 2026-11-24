@@ -131,8 +131,8 @@ fun WalletsSection(vm: WalletViewModel, act: androidx.fragment.app.FragmentActiv
     var remove by remember { mutableStateOf<WalletInfo?>(null) }
     Text(L("Peněženky", "Wallets"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
     Text(
-        L("Můžete mít víc peněženek – např. Kapesní na běžné placení a Trezor jen pro sledování úspor na Coldcardu. Každá má svá slova, adresy, poznámky i značky.",
-            "You can have several wallets – e.g. Pocket for everyday spending and a Vault that only watches savings on your Coldcard. Each has its own words, addresses, notes and tags."),
+        L("Můžete mít víc peněženek – např. Kapesní na běžné placení a Chlaďák jen pro sledování úspor na Coldcardu. Každá má svá slova, adresy, poznámky i značky.",
+            "You can have several wallets – e.g. Pocket for everyday spending and a Cold storage that only watches savings on your Coldcard. Each has its own words, addresses, notes and tags."),
         fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
     )
     Spacer(Modifier.height(8.dp))
@@ -162,8 +162,8 @@ fun WalletsSection(vm: WalletViewModel, act: androidx.fragment.app.FragmentActiv
         AlertDialog(
             onDismissRequest = { remove = null },
             title = { Text(L("Odebrat „${vm.walletName(w)}“?", "Remove „${vm.walletName(w)}“?")) },
-            text = { Text(L("Peněženku nejde otevřít, a tak ji z telefonu odeberu. Peníze na ní zůstanou – obnovíte ji ze svých slov (u Trezoru novým načtením z Coldcardu).",
-                "The wallet can't be opened, so it will be removed from the phone. The funds stay – restore it from your words (for a Vault, load it again from the Coldcard).")) },
+            text = { Text(L("Peněženku nejde otevřít, a tak ji z telefonu odeberu. Peníze na ní zůstanou – obnovíte ji ze svých slov (u Chlaďáku novým načtením z Coldcardu).",
+                "The wallet can't be opened, so it will be removed from the phone. The funds stay – restore it from your words (for a Cold storage wallet, load it again from the Coldcard).")) },
             confirmButton = { TextButton(onClick = { remove = null; act.auth(vm, L("Odebrat peněženku", "Remove wallet"), strong = true) { vm.removeWallet(w.id) } }) { Text(L("Odebrat", "Remove")) } },
             dismissButton = { TextButton(onClick = { remove = null }) { Text(L("Zrušit", "Cancel")) } }
         )
