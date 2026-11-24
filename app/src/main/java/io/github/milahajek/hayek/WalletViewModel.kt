@@ -3,6 +3,7 @@ package io.github.milahajek.hayek
 import android.app.Application
 import android.content.Context
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -77,6 +78,29 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     /** true = zakládá se další peněženka (obrazovky založení mají cestu zpět do aplikace). */
     var adding by mutableStateOf(false)
         private set
+
+    // ---------- Soubory vybrané uživatelem (systémový dialog) ----------
+    private suspend fun writeUri(uri: android.net.Uri, bytes: ByteArray) = withContext(Dispatchers.IO) {
+        val out = getApplication<Application>().contentResolver.openOutputStream(uri, "wt")
+            ?: throw java.io.IOException(L("Soubor se nepodařilo otevřít.", "Couldn't open the file."))
+        out.use { it.write(bytes) }
+    }
+
+    /** Načte soubor, nejvýš [max] bajtů (větší soubor odmítne dřív, než ho celý načte do paměti). */
+    private suspend fun readUri(uri: android.net.Uri, max: Int = 5_000_000): ByteArray = withContext(Dispatchers.IO) {
+        val input = getApplication<Application>().contentResolver.openInputStream(uri)
+            ?: throw java.io.IOException(L("Soubor se nepodařilo otevřít.", "Couldn't open the file."))
+        input.use { s ->
+            val buf = java.io.ByteArrayOutputStream()
+            val chunk = ByteArray(64 * 1024)
+            while (true) {
+                val n = s.read(chunk); if (n < 0) break
+                buf.write(chunk, 0, n)
+                require(buf.size() <= max) { L("Soubor je příliš velký.", "The file is too large.") }
+            }
+            buf.toByteArray()
+        }
+    }
 
     private fun dbFile(id: String) = File(getApplication<Application>().filesDir, WalletRegistry.dbName(id))
     private fun sp(name: String) = getApplication<Application>().getSharedPreferences(name, Context.MODE_PRIVATE)
@@ -180,7 +204,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- Poznámky k transakcím (jen v telefonu) ----------
     private var notesPrefs = sp(WalletRegistry.notesPrefs(activeId))
-    var notesVersion by mutableStateOf(0)
+    var notesVersion by mutableIntStateOf(0)
         private set
     fun note(txid: String): String = notesPrefs.getString(txid, "").orEmpty()
     fun setNote(txid: String, text: String) {
@@ -191,7 +215,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- Značky mincí KYC / bez KYC (jen v telefonu) ----------
     private var tagPrefs = sp(WalletRegistry.tagPrefs(activeId))
-    var tagsVersion by mutableStateOf(0)
+    var tagsVersion by mutableIntStateOf(0)
         private set
     private fun tagRaw(k: String): String? = tagPrefs.getString(k, null)
     fun coinTag(c: CoinItem): CoinTag? { tagsVersion; return resolveTag(c, ::tagRaw) }
@@ -301,7 +325,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     /** Po obnově ze slov nabídnout načtení zálohy štítků. */
     var offerLabelsImport by mutableStateOf(false)
     /** Počet změn štítků od poslední zálohy (poznámky, značky, zmrazení). */
-    var labelChanges by mutableStateOf(wPrefs.getInt("label_changes", 0))
+    var labelChanges by mutableIntStateOf(wPrefs.getInt("label_changes", 0))
         private set
     val lastLabelsBackup: Long get() { labelChanges; return wPrefs.getLong("labels_backup_at", 0) }
     private fun labelChanged() { labelChanges++; wPrefs.edit().putInt("label_changes", labelChanges).apply() }
@@ -321,9 +345,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun exportLabels(uri: android.net.Uri, password: String) = run {
         val text = Bip329.toJsonl(labelsForExport())
         val bytes = withContext(Dispatchers.Default) { if (password.isEmpty()) text.toByteArray() else Bip329.encrypt(text, password) }
-        withContext(Dispatchers.IO) {
-            getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use { it.write(bytes) }
-        }
+        writeUri(uri, bytes)
         labelChanges = 0
         wPrefs.edit().putInt("label_changes", 0).putLong("labels_backup_at", System.currentTimeMillis()).apply()
         message = L("Štítky uloženy ✔\n", "Labels saved ✔\n") + (if (password.isEmpty()) L("Soubor není šifrovaný – uložte ho na bezpečné místo.", "The file is not encrypted – keep it somewhere safe.") else L("Soubor je zašifrovaný heslem. Bez hesla ho nikdo nepřečte.", "The file is encrypted with a password. Without the password nobody can read it."))
@@ -333,9 +355,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Načte zálohu. U šifrovaného souboru bez hesla si o heslo řekne. */
     fun importLabels(uri: android.net.Uri, password: String? = null) = run {
-        val data = withContext(Dispatchers.IO) {
-            getApplication<Application>().contentResolver.openInputStream(uri)!!.use { it.readBytes() }.also { require(it.size < 5_000_000) { L("Soubor je příliš velký.", "The file is too large.") } }
-        }
+        val data = readUri(uri)
         val text = if (Bip329.isEncrypted(data)) {
             if (password == null) { labelsImportNeedsPassword = uri; return@run }
             withContext(Dispatchers.Default) { Bip329.decrypt(data, password) }
@@ -361,7 +381,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                 frozen++
             }
         }
-        if (frozen > 0) coins = lock.withLock { withContext(Dispatchers.IO) { c!!.coins() } }
+        if (frozen > 0 && c != null) coins = lock.withLock { withContext(Dispatchers.IO) { c.coins() } }
         prepared = null
         message = L("Štítky načteny ✔\nPoznámky: ${l.notes.size} · značky mincí: ${l.outputs.count { it.value.tag != null }} · značky adres: ${l.addresses.size} · kontakty: ${l.contacts.size}", "Labels imported ✔\nNotes: ${l.notes.size} · coin tags: ${l.outputs.count { it.value.tag != null }} · address tags: ${l.addresses.size} · contacts: ${l.contacts.size}") +
             if (frozen > 0) L(" · změněno zmrazení: $frozen", " · frozen state changed: $frozen") else ""
@@ -425,7 +445,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     var revealSeed by mutableStateOf(false)
     var connected by mutableStateOf<Boolean?>(null)
     /** 0 = podle telefonu, 1 = světlý, 2 = tmavý */
-    var theme by mutableStateOf(prefs.getInt("theme", 0))
+    var theme by mutableIntStateOf(prefs.getInt("theme", 0))
         private set
     var coins by mutableStateOf<List<CoinItem>>(emptyList())
     var selected by mutableStateOf<Set<String>>(emptySet())
@@ -466,7 +486,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { ServerAddr.parse(url) }.getOrNull()?.let { prefs.edit().remove("pin:${it.hostPort}").apply() }
         pinVersion++
     }
-    var pinVersion by mutableStateOf(0)
+    var pinVersion by mutableIntStateOf(0)
 
     val seedWords: String? get() = core?.mnemonicWords
     val seedPassphrase: String? get() = core?.passphrase
@@ -794,16 +814,14 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     fun savePsbtFile(uri: android.net.Uri) = run {
         val data = psbtForSigning() ?: return@run
-        withContext(Dispatchers.IO) { getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use { it.write(data) } }
+        writeUri(uri, data)
         message = L("PSBT uloženo ✔\nNa Coldcardu: Ready To Sign. Podepsaný soubor (.txn nebo -signed.psbt) pak načtěte tlačítkem „Načíst podepsaný soubor“.",
             "PSBT saved ✔\nOn the Coldcard: Ready To Sign. Then load the signed file (.txn or -signed.psbt) with „Load signed file“.")
     }
 
     fun loadSignedFile(uri: android.net.Uri) {
         viewModelScope.launch {
-            val data = try {
-                withContext(Dispatchers.IO) { getApplication<Application>().contentResolver.openInputStream(uri)!!.use { it.readBytes() } }
-            } catch (e: Exception) { message = e.message; return@launch }
+            val data = try { readUri(uri, max = 1_000_000) } catch (e: Exception) { message = e.message; return@launch }
             broadcastSigned(data)
         }
     }
@@ -915,7 +933,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         }
         wallets = emptyList(); cores.clear(); states.clear(); balances = emptyMap(); adding = false; activeId = WalletRegistry.PRIMARY_ID
         notesPrefs = sp("notes"); tagPrefs = sp("coin_tags"); wPrefs = prefs
-        prefs.edit().remove("wallets").remove("active_wallet").remove("contacts").remove("ln_limit").remove("hide_balance").remove("label_changes").remove("labels_backup_at").remove("dust_seen").remove("dust_ids").apply()
+        prefs.edit().remove("wallets").remove("active_wallet").remove("contacts").remove("ln_limit").remove("ln_backup_set").remove("ln_backup_at").remove("hide_balance").remove("label_changes").remove("labels_backup_at").remove("dust_seen").remove("dust_ids").apply()
         dbFile(WalletRegistry.PRIMARY_ID).let { db -> listOf(db, File(db.path + "-wal"), File(db.path + "-shm")).forEach { it.delete() } }
         core = null
         state = null
@@ -977,7 +995,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         return if (saved == null) ch.isNotEmpty() else saved != channelSetKey(ch)
     }
     val lnLastBackup: Long get() = prefs.getLong("ln_backup_at", 0)
-    var lnBackupVersion by mutableStateOf(0)
+    var lnBackupVersion by mutableIntStateOf(0)
         private set
 
     /** Stáhne zálohu kanálů z uzlu, nechá ji uzlem ověřit a uloží do souboru. */
@@ -990,9 +1008,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             c.verifyChannelBackup(d)
             d to ch
         }
-        withContext(Dispatchers.IO) {
-            getApplication<Application>().contentResolver.openOutputStream(uri, "wt")!!.use { it.write(data) }
-        }
+        writeUri(uri, data)
         lnChannels = chans
         prefs.edit().putString("ln_backup_set", channelSetKey(chans)).putLong("ln_backup_at", System.currentTimeMillis()).apply()
         lnBackupVersion++
@@ -1053,6 +1069,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     fun lnRemove() {
         lnConfig?.let { prefs.edit().remove("pin:ln:${it.hostPort}").apply() }
+        prefs.edit().remove("ln_backup_set").remove("ln_backup_at").apply()
         store.removeExtra(LND_KEY)
         lnClear()
         pinVersion++
@@ -1061,7 +1078,6 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     private fun lnClear() {
         pollJob?.cancel(); pollJob = null
         lnConfig = null; lnInfo = null; lnBalance = null; lnHistory = emptyList(); lnChannels = null
-        prefs.edit().remove("ln_backup_set").remove("ln_backup_at").apply()
         lnDecoded = null; lnInvoice = null; lnInvoicePaid = false; lnError = null
     }
 

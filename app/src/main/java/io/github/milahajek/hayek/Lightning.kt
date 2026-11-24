@@ -52,7 +52,7 @@ fun parseLndConnect(raw: String, fallbackHost: String? = null): LndConfig {
         val rest = text.substring("lndconnect://".length)
         val hostPort = rest.substringBefore("?").substringBefore("/").trim()
         val params = rest.substringAfter("?", "").split("&").associate {
-            it.substringBefore("=").lowercase() to java.net.URLDecoder.decode(it.substringAfter("=", ""), "UTF-8")
+            it.substringBefore("=").lowercase() to urlDecode(it.substringAfter("=", ""))
         }
         val mac = params["macaroon"] ?: throw IllegalArgumentException(L("V QR kódu chybí přístupový klíč (macaroon).", "The QR code is missing the access key (macaroon)."))
         val fp = params["certfp"]?.trim()?.uppercase()?.takeIf { it.matches(Regex("([0-9A-F]{2}:){31}[0-9A-F]{2}")) }
@@ -98,7 +98,10 @@ fun macaroonToHex(mac: String): String {
     return hex
 }
 
-class LndException(message: String, val code: Int = 0) : Exception(message)
+class LndException(message: String, val code: Int = 0, val kind: Kind = Kind.OTHER) : Exception(message) {
+    /** AUTH = uzel odmítl přístupový klíč, LOCKED = LND je zamčené; obojí platí pro všechny příkazy, ne jen pro jednu platbu. */
+    enum class Kind { AUTH, LOCKED, OTHER }
+}
 
 data class LnInfo(val alias: String, val pubkey: String, val activeChannels: Int, val syncedToChain: Boolean, val version: String)
 data class LnBalance(val canSendSat: Long, val canReceiveSat: Long, val pendingSat: Long)
@@ -174,7 +177,7 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
             }
             val code = conn.responseCode
             val text = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) throw LndException(errorMessage(text, code), code)
+            if (code !in 200..299) { val (msg, kind) = errorMessage(text, code); throw LndException(msg, code, kind) }
             return text
         } catch (e: javax.net.ssl.SSLException) {
             val pin = generateSequence<Throwable>(e) { it.cause }.mapNotNull { it.message }.firstOrNull { it.startsWith("PIN:") }
@@ -188,7 +191,7 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
         }
     }
 
-    private fun errorMessage(text: String, code: Int): String {
+    private fun errorMessage(text: String, code: Int): Pair<String, LndException.Kind> {
         val msg = runCatching {
             val j = JSONObject(text)
             (j.optJSONObject("error") ?: j).optString("message")
@@ -196,10 +199,10 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
         return when {
             code == 401 || code == 403 || msg.contains("permission denied") || msg.contains("verification failed") ||
                 msg.contains("macaroon", true) || msg.contains("unmarshal", true) ->
-                L("Uzel odmítl přístupový klíč ($msg). Vytvořte na uzlu nový a připojte se znovu.", "The node rejected the access key ($msg). Create a new one on the node and connect again.")
+                L("Uzel odmítl přístupový klíč ($msg). Vytvořte na uzlu nový a připojte se znovu.", "The node rejected the access key ($msg). Create a new one on the node and connect again.") to LndException.Kind.AUTH
             msg.contains("wallet locked", true) || msg.contains("not yet ready", true) || msg.contains("unlock", true) ->
-                L("LND na uzlu je zamčené. Odemkněte ho na RaspiBlitzu (menu → LND → UNLOCK, heslo C).", "LND on the node is locked. Unlock it on RaspiBlitz (menu → LND → UNLOCK, password C).")
-            else -> msg.ifBlank { L("Chyba LND (HTTP $code)", "LND error (HTTP $code)") }
+                L("LND na uzlu je zamčené. Odemkněte ho na RaspiBlitzu (menu → LND → UNLOCK, heslo C).", "LND on the node is locked. Unlock it on RaspiBlitz (menu → LND → UNLOCK, password C).") to LndException.Kind.LOCKED
+            else -> msg.ifBlank { L("Chyba LND (HTTP $code)", "LND error (HTTP $code)") } to LndException.Kind.OTHER
         }
     }
 
@@ -311,7 +314,7 @@ class LndClient(val config: LndConfig, private val pins: PinStore) {
             request("POST", "/v2/router/send", body, timeoutMs = 90_000)
         } catch (e: LndException) {
             // Odmítnutí před odesláním (už zaplaceno, vlastní faktura, vypršelo…) přijde jako HTTP chyba.
-            if (e.message.orEmpty().startsWith(L("Uzel odmítl přístupový klíč", "The node rejected the access key")) || e.message.orEmpty().startsWith(L("LND na uzlu je zamčené", "LND on the node is locked"))) throw e
+            if (e.kind != LndException.Kind.OTHER) throw e
             return LnPayResult(false, 0, null, translateFailure(e.message.orEmpty()))
         }
         return parsePayStream(text)

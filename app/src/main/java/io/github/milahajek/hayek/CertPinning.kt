@@ -112,6 +112,14 @@ data class ServerAddr(val ssl: Boolean, val host: String, val port: Int) {
     }
 }
 
+/** Přijme jakýkoli certifikát – POUZE pro krok „TLS (Java)“ v diagnostice, nikdy pro skutečnou práci s peněženkou. */
+@android.annotation.SuppressLint("CustomX509TrustManager", "TrustAllX509TrustManager")
+private object DiagnosticOnlyTrust : X509TrustManager {
+    override fun checkClientTrusted(c: Array<out X509Certificate>?, a: String?) = throw CertificateException("not a server")
+    override fun checkServerTrusted(c: Array<out X509Certificate>?, a: String?) {}
+    override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+}
+
 /**
  * Podrobná diagnostika spojení s uzlem – krok po kroku, každý krok samostatně.
  * Výsledek je text pro uživatele (aby šlo přesně zjistit, kde se spojení zastaví).
@@ -137,12 +145,9 @@ fun diagnoseConnection(url: String, pins: PinStore): String {
     }
     if (addr.ssl) {
         step("2 TLS (Java)") {
-            val trustAll = object : X509TrustManager {
-                override fun checkClientTrusted(c: Array<out X509Certificate>?, a: String?) {}
-                override fun checkServerTrusted(c: Array<out X509Certificate>?, a: String?) {}
-                override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-            }
-            val ctx = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trustAll), null) }
+            // Jen diagnostika: zjišťuje, jestli TLS vůbec funguje (i když certifikát nesedí – to ukáže krok 3).
+            // Posílá se jen dotaz na verzi serveru, žádné adresy ani jiné údaje peněženky.
+            val ctx = SSLContext.getInstance("TLS").apply { init(null, arrayOf(DiagnosticOnlyTrust), null) }
             Socket().use { raw ->
                 raw.connect(InetSocketAddress(addr.host, addr.port), 8000); raw.soTimeout = 8000
                 (ctx.socketFactory.createSocket(raw, addr.host, addr.port, false) as SSLSocket).use { s ->
@@ -270,7 +275,5 @@ class PinnedRelay private constructor(private val host: String, private val port
             relays.compute("$host:$port") { _, old ->
                 if (old != null && !old.server.isClosed && old.store === store) old else { old?.close(); PinnedRelay(host, port, store) }
             }!!
-
-        fun closeAll() { relays.values.forEach { it.close() }; relays.clear() }
     }
 }

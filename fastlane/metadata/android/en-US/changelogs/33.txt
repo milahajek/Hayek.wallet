@@ -1,0 +1,1 @@
+Cleanup and fixes after a code audit: a QR code with % in its description no longer crashes the app, the Lightning channel backup status is no longer forgotten after locking, faster QR rendering, clearer code structure.

@@ -104,7 +104,7 @@ fun SuccessOverlay(s: Success, onDone: () -> Unit) {
     val color = if (s.lightning) Color(0xFFF5B301) else HayekOrange
     Box(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background.copy(alpha = 0.94f))
-            .clickable(MutableInteractionSource(), null) { onDone() },
+            .clickable(remember { MutableInteractionSource() }, null) { onDone() },
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -121,7 +121,7 @@ fun SuccessOverlay(s: Success, onDone: () -> Unit) {
                 drawPath(part, color, style = Stroke(7.dp.toPx(), cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
             }
             Spacer(Modifier.height(18.dp))
-            Column(Modifier.alpha(text.value).offset(y = (8 * (1 - text.value)).dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.alpha(text.value).offset { IntOffset(0, (8 * (1 - text.value)).dp.roundToPx()) }, horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(s.title, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                 s.detail?.let { Text(it, fontSize = 17.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }

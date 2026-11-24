@@ -6,7 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -95,7 +95,7 @@ fun PassphraseSection(confirm: Boolean, preview: String? = null, onResult: (Stri
                     Text(L("Heslo navíc (passphrase)", "Passphrase"), fontWeight = FontWeight.SemiBold)
                     Text(L("Volitelné, pro pokročilé", "Optional, for advanced users"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                IconButton(onClick = { info = true }) { Icon(Icons.Default.HelpOutline, L("Co to je?", "What is it?")) }
+                IconButton(onClick = { info = true }) { Icon(Icons.AutoMirrored.Filled.HelpOutline, L("Co to je?", "What is it?")) }
             }
             if (on) {
                 Spacer(Modifier.height(6.dp))

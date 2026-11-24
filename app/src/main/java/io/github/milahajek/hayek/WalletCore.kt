@@ -531,12 +531,4 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
         val fast = maxOf(est(2) ?: normal, normal)
         return FeeEstimates(fast, normal, slow)
     }
-
-    /** Doporučený poplatek z vlastního uzlu (sat/vB) pro potvrzení do ~6 bloků. */
-    fun suggestedFeeRate(): Long = try {
-        val btcPerKb = withClient { it.estimateFee(6uL) }
-        if (btcPerKb <= 0) 2 else kotlin.math.ceil(btcPerKb * 100_000_000 / 1000).toLong().coerceAtLeast(1)
-    } catch (e: Exception) {
-        2
-    }
 }

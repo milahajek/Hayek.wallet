@@ -1,0 +1,1 @@
+Úklid a opravy po auditu kódu: QR kód se znakem % v popisu už aplikaci neshodí, stav zálohy Lightning kanálů se po zamčení nezapomíná, rychlejší vykreslení QR kódů, přehlednější struktura kódu.

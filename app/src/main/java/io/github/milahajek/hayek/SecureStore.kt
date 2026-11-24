@@ -26,6 +26,8 @@ const val AUTHENTICATORS =
  * Obnovovací fráze je zašifrovaná klíčem uloženým v bezpečném čipu telefonu (Android Keystore).
  * Klíč nejde z telefonu vytáhnout a použít ho jde jen do 60 s po ověření otiskem / PINem.
  */
+// commit() místo apply() je záměrné: zašifrované tajemství musí být na disku dřív, než se pokračuje.
+@android.annotation.SuppressLint("ApplySharedPref")
 class SecureStore(context: Context) {
     private val prefs = context.getSharedPreferences("secure", Context.MODE_PRIVATE)
     /** Alias klíče: starší instalace „seed_key_v1“ (TEE), nové a přesunuté klíče ve StrongBoxu „seed_key_sb…“. */
@@ -50,14 +52,14 @@ class SecureStore(context: Context) {
     }
     fun saveBg(name: String, value: String) {
         val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, bgKey()) }
-        val ct = c.doFinal(value.toByteArray())
+        val ct = c.doFinal(value.toByteArray(Charsets.UTF_8))
         prefs.edit().putString("bg_$name", Base64.encodeToString(c.iv, Base64.NO_WRAP) + ":" + Base64.encodeToString(ct, Base64.NO_WRAP)).apply()
     }
     fun loadBg(name: String): String? {
         val v = prefs.getString("bg_$name", null) ?: return null
         val (iv, ct) = v.split(":").let { Base64.decode(it[0], Base64.NO_WRAP) to Base64.decode(it[1], Base64.NO_WRAP) }
         val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, bgKey(), GCMParameterSpec(128, iv)) }
-        return String(c.doFinal(ct))
+        return String(c.doFinal(ct), Charsets.UTF_8)
     }
     fun removeBg(name: String) = prefs.edit().remove("bg_$name").apply()
 
@@ -112,7 +114,7 @@ class SecureStore(context: Context) {
         val nk = try { generate(newAlias, true) } catch (_: StrongBoxUnavailableException) { return false }
         fun enc(v: String): Pair<String, String> {
             val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, nk) }
-            return Base64.encodeToString(c.doFinal(v.toByteArray()), Base64.NO_WRAP) to Base64.encodeToString(c.iv, Base64.NO_WRAP)
+            return Base64.encodeToString(c.doFinal(v.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP) to Base64.encodeToString(c.iv, Base64.NO_WRAP)
         }
         val e = prefs.edit()
         seed?.let { enc(it).let { (ct, iv) -> e.putString("seed", ct).putString("iv", iv) } }
@@ -129,7 +131,7 @@ class SecureStore(context: Context) {
     fun saveSeed(words: String) {
         val c = Cipher.getInstance("AES/GCM/NoPadding")
         c.init(Cipher.ENCRYPT_MODE, key())
-        val ct = c.doFinal(words.toByteArray())
+        val ct = c.doFinal(words.toByteArray(Charsets.UTF_8))
         prefs.edit()
             .putString("seed", Base64.encodeToString(ct, Base64.NO_WRAP))
             .putString("iv", Base64.encodeToString(c.iv, Base64.NO_WRAP))
@@ -143,14 +145,14 @@ class SecureStore(context: Context) {
         val iv = Base64.decode(prefs.getString("iv", null), Base64.NO_WRAP)
         val c = Cipher.getInstance("AES/GCM/NoPadding")
         c.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, iv))
-        return String(c.doFinal(ct))
+        return String(c.doFinal(ct), Charsets.UTF_8)
     }
 
     /** Další tajný údaj (např. přístupový klíč k Lightning uzlu), šifrovaný stejným klíčem. Do 60 s po ověření. */
     fun saveExtra(name: String, value: String) {
         val c = Cipher.getInstance("AES/GCM/NoPadding")
         c.init(Cipher.ENCRYPT_MODE, key())
-        val ct = c.doFinal(value.toByteArray())
+        val ct = c.doFinal(value.toByteArray(Charsets.UTF_8))
         prefs.edit()
             .putString("x_$name", Base64.encodeToString(ct, Base64.NO_WRAP))
             .putString("x_${name}_iv", Base64.encodeToString(c.iv, Base64.NO_WRAP))
@@ -165,7 +167,7 @@ class SecureStore(context: Context) {
         val iv = prefs.getString("x_${name}_iv", null) ?: return null
         val c = Cipher.getInstance("AES/GCM/NoPadding")
         c.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, Base64.decode(iv, Base64.NO_WRAP)))
-        return String(c.doFinal(Base64.decode(ct, Base64.NO_WRAP)))
+        return String(c.doFinal(Base64.decode(ct, Base64.NO_WRAP)), Charsets.UTF_8)
     }
 
     fun removeExtra(name: String) {

@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.sp
 /** Zapne čtení NFC (reader mode), dokud je composable na obrazovce. onTag běží mimo hlavní vlákno. */
 @Composable
 fun NfcReader(enabled: Boolean, onTag: (Tag) -> Unit) {
-    val act = LocalContext.current as? Activity ?: return
+    val act = androidx.activity.compose.LocalActivity.current ?: return
     val adapter = remember { NfcAdapter.getDefaultAdapter(act) } ?: return
     val cb by rememberUpdatedState(onTag)
     DisposableEffect(enabled) {
@@ -49,7 +49,8 @@ fun ColdcardSignDialog(vm: WalletViewModel, onDismiss: () -> Unit) {
     var step by remember { mutableIntStateOf(1) }       // 1 = zapsat PSBT, 2 = načíst podpis, 3 = hotovo
     var signed by remember { mutableStateOf<ByteArray?>(null) }
     var err by remember { mutableStateOf<String?>(null) }
-    var working by remember { mutableStateOf(false) }
+    // NFC běží mimo hlavní vlákno – pojistka proti dvěma současným přiložením.
+    val working = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     val main = remember { Handler(Looper.getMainLooper()) }
     val nfc = nfcState()
     val tooBig = (psbt?.size ?: 0) > ColdcardNfc.MAX_NFC
@@ -62,8 +63,7 @@ fun ColdcardSignDialog(vm: WalletViewModel, onDismiss: () -> Unit) {
     }
 
     NfcReader(enabled = nfc == "ok" && psbt != null && !tooBig && step < 3) { tag ->
-        if (working) return@NfcReader
-        working = true
+        if (!working.compareAndSet(false, true)) return@NfcReader
         try {
             if (step == 1) {
                 ColdcardNfc.writePsbt(tag, psbt!!)
@@ -74,7 +74,7 @@ fun ColdcardSignDialog(vm: WalletViewModel, onDismiss: () -> Unit) {
             }
         } catch (e: Exception) {
             main.post { err = e.message ?: e::class.simpleName }
-        } finally { working = false }
+        } finally { working.set(false) }
     }
 
     AlertDialog(

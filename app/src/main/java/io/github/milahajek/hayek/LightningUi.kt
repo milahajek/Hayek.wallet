@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -93,7 +94,7 @@ fun LightningScreen(vm: WalletViewModel) {
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 HayekButton(onClick = { vm.openLnReceive() }, Modifier.weight(1f).height(52.dp)) {
-                    Icon(Icons.Default.CallReceived, null); Spacer(Modifier.width(6.dp)); Text(L("Přijmout", "Receive"))
+                    Icon(Icons.AutoMirrored.Filled.CallReceived, null); Spacer(Modifier.width(6.dp)); Text(L("Přijmout", "Receive"))
                 }
                 HayekButton(onClick = { vm.openLnPay() }, Modifier.weight(1f).height(52.dp)) {
                     Icon(Icons.Default.Bolt, null); Spacer(Modifier.width(6.dp)); Text(L("Zaplatit", "Pay"))
@@ -103,7 +104,7 @@ fun LightningScreen(vm: WalletViewModel) {
             val chans = vm.lnChannels
             Row(Modifier.padding(top = 18.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(L("Kanály", "Channels") + (chans?.let { " (${it.size})" } ?: ""), fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
-                IconButton(onClick = { help = true }) { Icon(Icons.Default.HelpOutline, L("Co je kanál?", "What is a channel?"), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                IconButton(onClick = { help = true }) { Icon(Icons.AutoMirrored.Filled.HelpOutline, L("Co je kanál?", "What is a channel?"), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
                 IconButton(onClick = { vm.lnRefresh() }, enabled = !vm.busy) { Icon(Icons.Default.Refresh, L("Obnovit", "Refresh")) }
             }
             when {
@@ -124,7 +125,7 @@ fun LightningScreen(vm: WalletViewModel) {
             ListItem(
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                 leadingContent = {
-                    Icon(if (h.incoming) Icons.Default.CallReceived else Icons.Default.Bolt, null, tint = if (h.incoming) Green else Bolt)
+                    Icon(if (h.incoming) Icons.AutoMirrored.Filled.CallReceived else Icons.Default.Bolt, null, tint = if (h.incoming) Green else Bolt)
                 },
                 headlineContent = { Text(if (vm.hideBalance) "••••• sat" else (if (h.incoming) "+" else "−") + formatSat(h.amountSat), fontWeight = FontWeight.SemiBold) },
                 supportingContent = {
@@ -247,7 +248,7 @@ fun ChannelCard(ch: LnChannel, vm: WalletViewModel, openUrl: (String?) -> Unit) 
                             Icon(Icons.Default.ContentCopy, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(L("Klíč", "Key"), fontSize = 13.sp)
                         }
                         GlassButton(onClick = { openUrl(vm.txLink(ch.fundingTxid)) }, Modifier.weight(1f)) {
-                            Icon(Icons.Default.OpenInNew, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(L("Transakce", "Transactions"), fontSize = 13.sp)
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, null, Modifier.size(18.dp)); Spacer(Modifier.width(4.dp)); Text(L("Transakce", "Transactions"), fontSize = 13.sp)
                         }
                     }
                 }

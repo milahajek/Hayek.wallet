@@ -6,6 +6,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -111,7 +112,7 @@ fun TxDetailDialog(tx: TxItem, vm: WalletViewModel, act: FragmentActivity) {
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     GlassButton(onClick = { openTx(ctx, vm, vm.txLink(tx.txid)) }, Modifier.weight(1f)) {
-                        Icon(Icons.Default.OpenInNew, null); Spacer(Modifier.width(6.dp)); Text("Mempool")
+                        Icon(Icons.AutoMirrored.Filled.OpenInNew, null); Spacer(Modifier.width(6.dp)); Text("Mempool")
                     }
                     HayekButton(onClick = { close() }, Modifier.weight(1f)) { Text(L("Hotovo", "Done")) }
                 }

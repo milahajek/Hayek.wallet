@@ -27,7 +27,7 @@ fun parsePaymentQr(raw: String): PaymentRequest? {
     var label: String? = null
     for (pair in body.substringAfter("?").split("&")) {
         val key = pair.substringBefore("=").lowercase()
-        val value = java.net.URLDecoder.decode(pair.substringAfter("=", ""), "UTF-8")
+        val value = urlDecode(pair.substringAfter("=", ""))
         when (key) {
             "amount" -> amountSat = btcToSat(value)
             "label", "message" -> if (label == null && value.isNotBlank()) label = value
@@ -37,6 +37,9 @@ fun parsePaymentQr(raw: String): PaymentRequest? {
     }
     return PaymentRequest(addr, amountSat, label)
 }
+
+/** Dekóduje %XX a +; neplatný zápis (např. „100%“ v popisu) nechá tak, jak je – QR kód nesmí aplikaci shodit. */
+fun urlDecode(s: String): String = try { java.net.URLDecoder.decode(s, "UTF-8") } catch (_: IllegalArgumentException) { s }
 
 /** „0.0015“ BTC → 150 000 sat. Neplatné nebo záporné částky ignoruje (vrátí null). */
 fun btcToSat(btc: String): Long? = try {
