@@ -1,13 +1,40 @@
-<p>Hayek Wallet je bitcoinová peněženka pro lidi, kteří provozují vlastní uzel. Připojuje se <b>výhradně</b> k vašemu Electrum serveru (Fulcrum nebo ElectRS) a nové peněženky vytváří <b>jen z hodů kostkou</b>.</p>
-<p><b>Experimentální software bez auditu – používejte jen na malé částky.</b></p>
+<p>Hayek Wallet je bitcoinová peněženka s otevřeným kódem, ve které máte klíče jen vy. Nová peněženka vzniká výhradně z vašich hodů kostkou – náhodu dodáváte sami a postup si můžete nezávisle ověřit.</p>
+<p><b>⚠ Experimentální software. Používejte jen na malé částky a vždy si zapište obnovovací slova na papír.</b></p>
+<p><b>KLÍČE A ZÁLOHA</b></p>
 <ul>
-<li>24 slov (BIP39) z 99 a více hodů šestistěnnou kostkou (SHA-256 z hodů, stejná metoda jako Coldcard a SeedSigner – lze nezávisle ověřit)</li>
-<li>Žádný výchozí server, certifikát vašeho uzlu je připnutý. Kdo uzel nemá, může po upozornění na soukromí zvolit veřejný server</li>
+<li>24 slov (BIP39) z 99 a více hodů šestistěnnou kostkou – stejná metoda jako Coldcard a SeedSigner</li>
+<li>Volitelné heslo navíc (passphrase) se srozumitelným vysvětlením</li>
+<li>Kontrola zálohy: všech 24 slov, v náhodném pořadí, s našeptáváním</li>
+<li>Slova šifrovaná v Android Keystore (StrongBox, pokud ho telefon má)</li>
 <li>Standardní adresy BIP84 – peněženku obnovíte v jakékoli běžné peněžence</li>
-<li>Coin control: výběr mincí k utracení a jejich zmrazení</li>
-<li>Sledovací režim (zpub/ypub/xpub nebo deskriptor) a export veřejného deskriptoru</li>
-<li>Fráze šifrovaná v Android Keystore, odemykání a potvrzení plateb otiskem/PINem, automatické zamčení, zákaz snímků obrazovky, anonymní klávesnice pro slova, kontrola zálohy</li>
-<li>Odkazy na transakce vedou do vašeho vlastního Mempoolu</li>
-<li>Žádná analytika, reklamy ani telemetrie</li>
 </ul>
-<p>Vyžaduje Android 11+, zámek obrazovky a vlastní bitcoinový uzel s Electrum serverem dostupný z telefonu (domácí síť nebo VPN).</p>
+<p><b>SOUKROMÍ</b></p>
+<ul>
+<li>Připojíte se k vlastnímu uzlu (Electrum server – Fulcrum, ElectRS), nebo si vědomě vyberete veřejný server</li>
+<li>Aplikace se sama od sebe nikam nepřipojuje</li>
+<li>Certifikát vašeho uzlu je připnutý</li>
+<li>Žádné účty, analytika, reklamy ani telemetrie</li>
+<li>Značky mincí KYC / bez KYC, aby se nesmíchaly omylem</li>
+<li>Ochrana proti prachovým útokům (dust)</li>
+</ul>
+<p><b>PLACENÍ</b></p>
+<ul>
+<li>Výběr mincí (coin control) a jejich zmrazení</li>
+<li>Urychlení platby (RBF), žádost o platbu s částkou, adresář</li>
+<li>Lightning přes váš vlastní uzel LND</li>
+<li>Upozornění na příchozí platby</li>
+</ul>
+<p><b>VÍCE PENĚŽENEK A COLDCARD</b></p>
+<ul>
+<li>Kapesní peněženka na běžné placení a sledovací peněženka pro úspory</li>
+<li>Podepisování plateb hardwarovou peněženkou Coldcard přes NFC – klíče z ní neodcházejí</li>
+<li>Sledovací režim (zpub / ypub / xpub nebo deskriptor)</li>
+</ul>
+<p><b>ZABEZPEČENÍ</b></p>
+<ul>
+<li>Odemykání a potvrzování plateb otiskem prstu nebo PINem</li>
+<li>Automatické zamčení, zákaz snímků obrazovky</li>
+<li>Záloha štítků (BIP-329) a Lightning kanálů</li>
+</ul>
+<p>Aplikace je zdarma, v češtině a angličtině. Zdrojový kód: https://github.com/milahajek/Hayek.wallet</p>
+<p>Vyžaduje Android 11 nebo novější a zámek obrazovky. Lightning vyžaduje vlastní uzel LND.</p>

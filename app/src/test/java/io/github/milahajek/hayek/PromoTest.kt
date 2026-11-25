@@ -45,10 +45,10 @@ class PromoTest {
     private fun base(vm: WalletViewModel) {
         vm.setThemeMode(0); vm.setServer("ssl://10.0.0.1:50002"); vm.connected = true; vm.state = state
         vm.coins = listOf(CoinItem(h(2), 0, 1_000_000, "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", true, 925_890, false), CoinItem(h(4), 1, 250_000, "bc1qp59yckz4ae5c4efgw2s5wfyvrz0ala7rgvuz8z", true, 925_330, false), CoinItem(h(6), 0, 75_000, "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", true, 924_600, false), CoinItem(h(8), 0, 1_547_009, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", true, 923_700, false))
-        vm.setNote(h(1), "Nájem – listopad"); vm.setNote(h(2), "Výplata – úspory")
-        vm.setNote(h(3), "Bisq – kauce za obchod"); vm.setNote(h(4), "Bisq – nákup za CZK"); vm.setNote(h(6), "Bisq – vrácená kauce"); vm.setNote(h(7), "Bisq – prodej za EUR"); vm.setNote(h(5), "Otevření kanálu ACINQ")
-        vm.setNote(h(8), "Bisq – nákup BTC (DCA)")
-        vm.lnConfig = LndConfig("10.0.0.1:8080", "02".repeat(80)); vm.lnInfo = LnInfo("Můj uzel", "03e4ba21", 4, true, "0.19.3-beta")
+        vm.setNote(h(1), L("Nájem – listopad", "Rent – November")); vm.setNote(h(2), L("Výplata – úspory", "Salary – savings"))
+        vm.setNote(h(3), L("Bisq – kauce za obchod", "Bisq – trade deposit")); vm.setNote(h(4), L("Bisq – nákup za CZK", "Bisq – bought for CZK")); vm.setNote(h(6), L("Bisq – vrácená kauce", "Bisq – deposit refund")); vm.setNote(h(7), L("Bisq – prodej za EUR", "Bisq – sold for EUR")); vm.setNote(h(5), L("Otevření kanálu ACINQ", "Opening ACINQ channel"))
+        vm.setNote(h(8), L("Bisq – nákup BTC (DCA)", "Bisq – BTC purchase (DCA)"))
+        vm.lnConfig = LndConfig("10.0.0.1:8080", "02".repeat(80)); vm.lnInfo = LnInfo(L("Můj uzel", "My node"), "03e4ba21", 4, true, "0.19.3-beta")
         vm.lnBalance = LnBalance(1_163_920, 1_028_080, 0)
         vm.lnChannels = listOf(
             LnChannel("03864ef025fde8fb587d989186ce6a4a186895ee44a926bfc370e2c366597a3f8f", "ACINQ", "#49daaa",
@@ -60,8 +60,9 @@ class PromoTest {
             LnChannel("0298f6074a454a1f5345cb2a7c6f9fce206cd0bf675d177cdbf0ca7508dd28852f", "Kolíbrík", "#c040ff",
                 200_000, 170_000, 0, 2_000, false, true, false, true, h(14) + ":1"),
         )
+        vm.previewLnBackedUp()
         vm.lnHistory = listOf(
-            LnHistoryItem(false, 4_200, 1, now - 3_600, "Káva", "p:1"),
+            LnHistoryItem(false, 4_200, 1, now - 3_600, L("Káva", "Coffee"), "p:1"),
             LnHistoryItem(true, 21_000, 0, now - 7_200, "Oběd od Petra", "i:1"),
             LnHistoryItem(false, 12_500, 3, now - d, "Dárková karta", "p:2"),
             LnHistoryItem(true, 100_000, 0, now - 2 * d, "Faktura – překlad", "i:2"),
@@ -85,7 +86,7 @@ class PromoTest {
     @Test fun p8_receive() = shoot("p8_receive") { base(it); tags(it); it.setAddressTag(it.state!!.address, CoinTag.NOKYC); it.screen = Screen.Receive }
     @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
     @Test fun p9_home_tags() = shoot("p9_home_tags") { base(it); tags(it); it.screen = Screen.Home }
-    private val two = listOf(WalletInfo("w1", "", "seed", "hot"), WalletInfo("w2", "Chlaďák", "wallet_w2", "watch"))
+    private val two = listOf(WalletInfo("w1", "", "seed", "hot"), WalletInfo("w2", "", "wallet_w2", "watch"))
     private fun multi(vm: WalletViewModel, active: String = "w1") = vm.previewWallets(two, mapOf("w1" to 2_797_009L, "w2" to 41_250_000L), active)
     @Test fun p10_wallets_home() = shoot("p10_wallets_home") { base(it); tags(it); multi(it); it.screen = Screen.Home }
     @Test fun p11_wallets_vault() = shoot("p11_wallets_vault") { base(it); multi(it, "w2"); it.screen = Screen.Home }

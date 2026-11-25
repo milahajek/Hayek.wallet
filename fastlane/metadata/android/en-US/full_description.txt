@@ -1,13 +1,40 @@
-<p>Hayek Wallet is a self-custodial Bitcoin wallet for people who run their own node. It connects <b>only</b> to your own Electrum server (Fulcrum or ElectRS) and creates new wallets <b>only from dice rolls</b>.</p>
-<p><b>Experimental, unaudited software – use with small amounts only. The app is available in English and Czech.</b></p>
+<p>Hayek Wallet is an open-source, self-custodial Bitcoin wallet. A new wallet is created only from your own dice rolls – you supply the randomness yourself and can verify the process independently.</p>
+<p><b>⚠ Experimental software. Use it with small amounts only and always write your recovery words on paper.</b></p>
+<p><b>KEYS AND BACKUP</b></p>
 <ul>
-<li>24-word BIP39 seed from 99+ rolls of a six-sided die (SHA-256 of the rolls, same method as Coldcard and SeedSigner – independently verifiable)</li>
-<li>No default server; your node's certificate is pinned. Users without a node can deliberately choose a public server after a privacy warning</li>
-<li>Standard BIP84 native SegWit addresses – restore in any common wallet</li>
-<li>Coin control: choose which coins to spend, freeze coins</li>
-<li>Watch-only mode (zpub/ypub/xpub or descriptor) and public descriptor export</li>
-<li>Seed encrypted with Android Keystore, biometric/PIN unlock and payment confirmation, auto-lock, screenshots blocked, incognito keyboard for seed words, backup check</li>
-<li>Transaction links open in your own Mempool instance</li>
-<li>No analytics, no ads, no telemetry</li>
+<li>24 words (BIP39) from 99 or more rolls of a six-sided die – the same method as Coldcard and SeedSigner</li>
+<li>Optional passphrase with a clear explanation</li>
+<li>Backup check: all 24 words, in random order, with suggestions</li>
+<li>Words encrypted in Android Keystore (StrongBox where the phone has it)</li>
+<li>Standard BIP84 addresses – restore in any common wallet</li>
 </ul>
-<p>Requires Android 11+, a screen lock, and your own Bitcoin node with an Electrum server reachable from the phone (home network or VPN).</p>
+<p><b>PRIVACY</b></p>
+<ul>
+<li>Connect to your own node (Electrum server – Fulcrum, ElectRS), or deliberately choose a public server</li>
+<li>The app never connects anywhere on its own</li>
+<li>Your node's certificate is pinned</li>
+<li>No accounts, analytics, ads or telemetry</li>
+<li>KYC / no-KYC coin tags so coins don't get mixed by accident</li>
+<li>Dust attack protection</li>
+</ul>
+<p><b>PAYMENTS</b></p>
+<ul>
+<li>Coin control and coin freezing</li>
+<li>Fee bumping (RBF), payment requests with an amount, address book</li>
+<li>Lightning through your own LND node</li>
+<li>Incoming payment notifications</li>
+</ul>
+<p><b>MULTIPLE WALLETS AND COLDCARD</b></p>
+<ul>
+<li>A pocket wallet for everyday spending and a watch-only wallet for savings</li>
+<li>Sign payments with a Coldcard hardware wallet over NFC – the keys never leave it</li>
+<li>Watch-only mode (zpub / ypub / xpub or descriptor)</li>
+</ul>
+<p><b>SECURITY</b></p>
+<ul>
+<li>Unlock and confirm payments with fingerprint or PIN</li>
+<li>Auto-lock, screenshots blocked</li>
+<li>Backup of labels (BIP-329) and Lightning channels</li>
+</ul>
+<p>The app is free and available in English and Czech. Source code: https://github.com/milahajek/Hayek.wallet</p>
+<p>Requires Android 11 or later and a screen lock. Lightning requires your own LND node.</p>

@@ -1,1 +1,1 @@
-Bitcoinová peněženka pro váš vlastní uzel, seed z hodů kostkou
+Bitcoinová peněženka: seed z hodů kostkou, vlastní uzel, klíče jen u vás

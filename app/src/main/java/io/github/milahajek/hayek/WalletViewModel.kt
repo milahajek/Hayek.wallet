@@ -122,6 +122,9 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putString("wallets", WalletRegistry.toJson(list)).commit()
     }
 
+    /** Jen pro náhledy obrazovek v testech: kanály jsou zálohované. */
+    internal fun previewLnBackedUp() { lnChannels?.let { prefs.edit().putString("ln_backup_set", channelSetKey(it)).putLong("ln_backup_at", System.currentTimeMillis()).apply() } }
+
     /** Jen pro náhledy obrazovek v testech. */
     internal fun previewWallets(list: List<WalletInfo>, bal: Map<String, Long>, active: String, addingMode: Boolean = false) {
         wallets = list; balances = bal; activeId = active; adding = addingMode

@@ -1,1 +1,1 @@
-Bitcoin wallet for your own node, with seed generated from dice rolls
+Bitcoin wallet: seed from dice rolls, your own node, keys only with you

@@ -211,27 +211,29 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
         }
 
         // Podpora vývoje – adresa pro dary
-        HorizontalDivider(Modifier.padding(vertical = 20.dp))
-        Text(L("Podpořit vývoj", "Support development"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text(
-            L("Hayek Wallet je zdarma a s otevřeným kódem. Pokud vám je užitečná, můžete přispět libovolnou částkou v bitcoinech.", "Hayek Wallet is free and open source. If you find it useful, you can contribute any amount in bitcoin."),
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(12.dp))
-        val donateQr = remember { qrBitmap("bitcoin:$DONATION_ADDRESS?label=Hayek%20Wallet") }
-        Image(donateQr.asImageBitmap(), L("QR kód adresy pro dary", "Donation address QR code"),
-            Modifier.size(200.dp).align(Alignment.CenterHorizontally).background(Color.White).padding(6.dp))
-        Spacer(Modifier.height(8.dp))
-        androidx.compose.foundation.text.selection.SelectionContainer(Modifier.align(Alignment.CenterHorizontally)) {
-            Text(DONATION_ADDRESS.chunked(4).joinToString(" "), fontFamily = FontFamily.Monospace, fontSize = 13.sp, textAlign = TextAlign.Center)
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            GlassButton(onClick = { copy(ctx, DONATION_ADDRESS); vm.message = L("Adresa pro dary zkopírována. Děkujeme!", "Donation address copied. Thank you!") }, Modifier.weight(1f)) {
-                Icon(Icons.Default.ContentCopy, null); Spacer(Modifier.width(6.dp)); Text(L("Kopírovat", "Copy"))
+        if (!BuildConfig.PLAY) {
+            HorizontalDivider(Modifier.padding(vertical = 20.dp))
+            Text(L("Podpořit vývoj", "Support development"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(
+                L("Hayek Wallet je zdarma a s otevřeným kódem. Pokud vám je užitečná, můžete přispět libovolnou částkou v bitcoinech.", "Hayek Wallet is free and open source. If you find it useful, you can contribute any amount in bitcoin."),
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            val donateQr = remember { qrBitmap("bitcoin:$DONATION_ADDRESS?label=Hayek%20Wallet") }
+            Image(donateQr.asImageBitmap(), L("QR kód adresy pro dary", "Donation address QR code"),
+                Modifier.size(200.dp).align(Alignment.CenterHorizontally).background(Color.White).padding(6.dp))
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.foundation.text.selection.SelectionContainer(Modifier.align(Alignment.CenterHorizontally)) {
+                Text(DONATION_ADDRESS.chunked(4).joinToString(" "), fontFamily = FontFamily.Monospace, fontSize = 13.sp, textAlign = TextAlign.Center)
             }
-            if (vm.isOpen && !vm.watchOnly) HayekButton(onClick = { vm.sendPrefill = DONATION_ADDRESS; vm.openSend() }, Modifier.weight(1f)) {
-                Icon(Icons.Default.Favorite, null); Spacer(Modifier.width(6.dp)); Text(L("Přispět", "Donate"))
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                GlassButton(onClick = { copy(ctx, DONATION_ADDRESS); vm.message = L("Adresa pro dary zkopírována. Děkujeme!", "Donation address copied. Thank you!") }, Modifier.weight(1f)) {
+                    Icon(Icons.Default.ContentCopy, null); Spacer(Modifier.width(6.dp)); Text(L("Kopírovat", "Copy"))
+                }
+                if (vm.isOpen && !vm.watchOnly) HayekButton(onClick = { vm.sendPrefill = DONATION_ADDRESS; vm.openSend() }, Modifier.weight(1f)) {
+                    Icon(Icons.Default.Favorite, null); Spacer(Modifier.width(6.dp)); Text(L("Přispět", "Donate"))
+                }
             }
         }
         Spacer(Modifier.height(24.dp))

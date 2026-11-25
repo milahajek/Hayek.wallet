@@ -12,8 +12,11 @@ android {
         applicationId = "io.github.milahajek.hayek"
         minSdk = 30
         targetSdk = 36
-        versionCode = 37
-        versionName = "1.18.1"
+        versionCode = 38
+        versionName = "1.18.2"
+        // Sestavení pro Google Play (./gradlew bundleRelease -Pplay): bez sekce „Podpořit vývoj“ –
+        // pravidla Play pro dary v aplikacích; verze z GitHubu ji má dál.
+        buildConfigField("boolean", "PLAY", project.hasProperty("play").toString())
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 
@@ -41,7 +44,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests { isIncludeAndroidResources = true; all { it.systemProperty("roborazzi.test.record", "true"); it.maxHeapSize = "3g" } } }
     packaging { jniLibs { useLegacyPackaging = true } }
 }
