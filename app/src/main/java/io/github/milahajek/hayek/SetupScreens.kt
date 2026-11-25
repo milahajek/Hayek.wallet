@@ -1,5 +1,7 @@
 package io.github.milahajek.hayek
 
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -216,40 +218,73 @@ fun ShowSeedScreen(words: String, vm: WalletViewModel) {
 @Composable
 fun VerifyScreen(s: Screen.Verify, vm: WalletViewModel, act: FragmentActivity) {
     val list = s.words.split(" ")
-    val answers = remember(s) { mutableStateListOf("", "", "") }
+    var idx by remember(s) { mutableIntStateOf(0) }
+    var input by remember(s) { mutableStateOf("") }
     val pass = vm.newPassphrase
     var passAgain by remember(s) { mutableStateOf("") }
     var showPass by remember { mutableStateOf(false) }
+    val done = idx >= list.size
+    var wrong by remember(s) { mutableStateOf(false) }
+    val focus = remember { FocusRequester() }
+    // Slovo se potvrzuje mezerou nebo klávesou Další: teprve pak se porovná (nic se nepotvrdí předčasně ani „nepřeteče“ do dalšího pole).
+    fun confirm() {
+        if (idx >= list.size || input.isBlank()) return
+        if (wordMatches(input, list[idx]) == true) { idx++; input = ""; wrong = false } else wrong = true
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text(L("Kontrola zálohy", "Backup check"), fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Text(L("Podle svého papíru napište tato slova:", "Using your paper, type these words:"))
+        Text(L("Opište ze svého papíru všech ${list.size} slov, jedno po druhém. Každé potvrďte mezerou. Stačí i první 4 písmena.",
+            "Type all ${list.size} words from your paper, one by one. Confirm each with a space. The first 4 letters are enough."))
         Spacer(Modifier.height(12.dp))
-        s.positions.forEachIndexed { i, p ->
-            OutlinedTextField(
-                value = answers[i], onValueChange = { answers[i] = it.trim().lowercase() },
-                label = { Text(L("Slovo č. ${p + 1}", "Word #${p + 1}")) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false)
-            )
+        LinearProgressIndicator(progress = { idx / list.size.toFloat() }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(6.dp))
+        if (!done) {
+            Text(L("Slovo ${idx + 1} z ${list.size}", "Word ${idx + 1} of ${list.size}"), fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))
-        }
-        if (pass != null) {
-            Text(L("A heslo navíc (passphrase) podle svého papíru:", "And the passphrase from your paper:"), fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(6.dp))
-            OutlinedTextField(
-                value = passAgain, onValueChange = { passAgain = it }, label = { Text(L("Heslo", "Passphrase")) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                visualTransformation = if (showPass) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
-                trailingIcon = { IconButton(onClick = { showPass = !showPass }) { Icon(if (showPass) Icons.Default.VisibilityOff else Icons.Default.Visibility, null) } }
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        HayekButton(onClick = {
-            val ok = s.positions.indices.all { answers[it] == list[s.positions[it]] }
-            if (!ok) vm.message = L("Některé slovo nesedí. Zkontrolujte svůj zápis (vraťte se zpět a porovnejte).", "A word doesn't match. Check what you wrote (go back and compare).")
-            else if (pass != null && passAgain != pass) vm.message = L("Heslo nesedí s tím, které jste zadali. Zkontrolujte zápis včetně velkých písmen a mezer.", "The passphrase doesn't match the one you entered. Check your note including capitals and spaces.")
-            else act.auth(vm, L("Uložit peněženku", "Save wallet")) { vm.saveAndOpen(Passphrase.pack(s.words, pass)) }
-        }, enabled = answers.all { it.isNotBlank() } && (pass == null || passAgain.isNotEmpty()) && !vm.busy, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-            Text(L("Zkontrolovat a uložit", "Check and save"))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { v ->
+                        val ended = v.isNotEmpty() && v.last().isWhitespace()
+                        input = v.trim().lowercase(); wrong = false
+                        if (ended) confirm()
+                    },
+                    label = { Text(L("Slovo č. ${idx + 1}", "Word #${idx + 1}")) }, singleLine = true, isError = wrong,
+                    modifier = Modifier.weight(1f).focusRequester(focus),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, imeAction = androidx.compose.ui.text.input.ImeAction.Next),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onNext = { confirm() }, onDone = { confirm() })
+                )
+                Spacer(Modifier.width(8.dp))
+                HayekButton(onClick = { confirm() }, enabled = input.isNotBlank()) { Text(L("Další", "Next")) }
+            }
+            LaunchedEffect(idx) { runCatching { focus.requestFocus() } }
+            if (wrong) {
+                Spacer(Modifier.height(6.dp))
+                Text(L("Tohle nesedí se slovem č. ${idx + 1}. Porovnejte ho se svým papírem – chyba v záloze by se jinak ukázala až při obnově.",
+                    "This doesn't match word #${idx + 1}. Compare it with your paper – a mistake in the backup would otherwise show up only when restoring."),
+                    color = MaterialTheme.colorScheme.error, fontSize = 14.sp)
+                TextButton(onClick = { vm.screen = Screen.ShowSeed(s.words) }) { Text(L("Zobrazit slova znovu", "Show the words again")) }
+            }
+        } else {
+            Text(L("✔ Všech ${list.size} slov sedí.", "✔ All ${list.size} words match."), fontWeight = FontWeight.SemiBold, color = Color(0xFF2E9E5B))
+            Spacer(Modifier.height(12.dp))
+            if (pass != null) {
+                Text(L("A heslo navíc (passphrase) podle svého papíru:", "And the passphrase from your paper:"), fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = passAgain, onValueChange = { passAgain = it }, label = { Text(L("Heslo", "Passphrase")) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = if (showPass) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, keyboardType = KeyboardType.Password),
+                    trailingIcon = { IconButton(onClick = { showPass = !showPass }) { Icon(if (showPass) Icons.Default.VisibilityOff else Icons.Default.Visibility, null) } }
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+            HayekButton(onClick = {
+                if (pass != null && passAgain != pass) vm.message = L("Heslo nesedí s tím, které jste zadali. Zkontrolujte zápis včetně velkých písmen a mezer.", "The passphrase doesn't match the one you entered. Check your note including capitals and spaces.")
+                else act.auth(vm, L("Uložit peněženku", "Save wallet")) { vm.saveAndOpen(Passphrase.pack(s.words, pass)) }
+            }, enabled = (pass == null || passAgain.isNotEmpty()) && !vm.busy, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Text(L("Uložit peněženku", "Save wallet"))
+            }
         }
     }
 }

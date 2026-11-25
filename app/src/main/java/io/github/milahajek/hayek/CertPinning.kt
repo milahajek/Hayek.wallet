@@ -270,10 +270,17 @@ class PinnedRelay private constructor(private val host: String, private val port
     companion object {
         private val relays = ConcurrentHashMap<String, PinnedRelay>()
 
-        /** Jeden relay na uzel po dobu běhu aplikace. */
+        /**
+         * Jeden relay na uzel po dobu běhu aplikace – i když o něj žádá někdo jiný (kontrola plateb na pozadí).
+         * Relay z úložiště otisků jen čte a všechna úložiště v aplikaci čtou stejná data, takže ho není proč měnit.
+         * Kdyby se zavíral a otevíral, uvolněný místní port by mezitím mohla obsadit jiná aplikace v telefonu.
+         */
+        /** Zavře relay k uzlu (když uživatel jeho certifikát odmítl). */
+        fun forget(hostPort: String) { relays.remove(hostPort)?.close() }
+
         fun forServer(host: String, port: Int, store: PinStore): PinnedRelay =
             relays.compute("$host:$port") { _, old ->
-                if (old != null && !old.server.isClosed && old.store === store) old else { old?.close(); PinnedRelay(host, port, store) }
+                if (old != null && !old.server.isClosed) old else PinnedRelay(host, port, store)
             }!!
     }
 }

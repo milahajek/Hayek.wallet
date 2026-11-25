@@ -1,0 +1,1 @@
+Opravy po nezávislém bezpečnostním auditu: ochranu otiskem už nejde obejít smazáním otisků, kontrola zálohy ověřuje všech 24 slov, při prvním spojení se ukáže certifikát uzlu, urychlení platby nemíchá KYC a bez KYC mince, odeslání ze sledovací peněženky s adresami od 3, oprava pro starší instalace s více peněženkami.

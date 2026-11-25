@@ -39,8 +39,9 @@ object WalletRegistry {
         return listOf(WalletInfo(PRIMARY_ID, defaultName, SLOT_SEED, "hot"))
     }
 
-    fun newId(existing: List<WalletInfo>): String {
-        var n = existing.size + 1
+    /** @param lastUsed nejvyšší číslo, které už kdy bylo přiděleno (i smazané peněžence). */
+    fun newId(existing: List<WalletInfo>, lastUsed: Int = 1): String {
+        var n = maxOf(existing.size, lastUsed) + 1
         while (existing.any { it.id == "w$n" }) n++
         return "w$n"
     }

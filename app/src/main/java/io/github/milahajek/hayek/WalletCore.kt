@@ -84,7 +84,14 @@ enum class FeeChoice(private val t: Pair<String, String>, private val e: Pair<St
 const val TYPICAL_TX_VBYTES = 141
 
 /** Připravené urychlení (RBF): nová transakce nahrazující původní. */
-data class PreparedBump(val psbt: Psbt, val oldTxid: String, val oldFeeSat: Long, val newFeeSat: Long, val feeRate: Long, val recipientSat: Long)
+data class PreparedBump(
+    val psbt: Psbt, val oldTxid: String, val oldFeeSat: Long, val newFeeSat: Long, val feeRate: Long, val recipientSat: Long,
+    /** Mince z jiné skupiny (KYC / bez KYC), které bylo nutné přibrat, protože na vyšší poplatek jinak nebylo dost. */
+    val mixedInputIds: List<String> = emptyList(),
+)
+
+/** Nejvíc nepoužitých adres za sebou. Víc by peněženka po obnově ze slov nenašla (hledá s mezerou 20). */
+const val ADDRESS_GAP = 20
 
 data class WalletState(
     val confirmedSat: Long,
@@ -204,6 +211,11 @@ object Seed {
     fun fromDice(rolls: String): String {
         require(rolls.all { it in '1'..'6' }) { L("Hody smí obsahovat jen čísla 1–6", "Rolls may only contain the numbers 1–6") }
         require(rolls.length >= MIN_ROLLS) { L("Potřeba alespoň $MIN_ROLLS hodů", "At least $MIN_ROLLS rolls are needed") }
+        return wordsFromRolls(rolls)
+    }
+
+    /** Samotný převod hodů na slova, bez kontroly počtu – hlídají ho testy proti známým vektorům (SeedVectorsTest). */
+    internal fun wordsFromRolls(rolls: String): String {
         val entropy = MessageDigest.getInstance("SHA-256").digest(rolls.toByteArray(Charsets.US_ASCII))
         return Mnemonic.fromEntropy(entropy).toString()
     }
@@ -288,14 +300,33 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
             internal = Descriptor.newBip84(secretKey, KeychainKind.INTERNAL, NetworkKind.MAIN)
         }
     }
-    private val persister = Persister.newSqlite(dbFile.absolutePath)
     private var client: ElectrumClient? = null
     private var clientUrl: String? = null
 
-    private val wallet: Wallet = try {
-        Wallet.load(external, internal, persister)
-    } catch (e: Exception) {
-        Wallet(external, internal, NETWORK, persister)
+    private val persister: Persister
+    private val wallet: Wallet
+    /** true = místní databáze byla nečitelná a založila se znovu (zmrazení mincí se tím ztratilo). */
+    val dbReset: Boolean
+
+    init {
+        // Databáze drží jen veřejná data z uzlu (transakce, adresy). Když je poškozená nebo patří jinému klíči,
+        // smaže se a načte znovu z uzlu – slova ani klíče v ní nejsou, takže se nic neztratí.
+        var reset = false
+        val opened = try { open() } catch (e: Exception) {
+            // Mohla to být jen chvilková kolize (dobíhající zápis po zamčení): nejdřív zkusit znovu, mazat až potom.
+            try { Thread.sleep(400); open() } catch (e2: Exception) {
+                listOf(dbFile, File(dbFile.path + "-wal"), File(dbFile.path + "-shm")).forEach { it.delete() }
+                reset = true
+                open()
+            }
+        }
+        persister = opened.first; wallet = opened.second; dbReset = reset
+    }
+
+    private fun open(): Pair<Persister, Wallet> {
+        val p = Persister.newSqlite(dbFile.absolutePath)
+        val w = try { Wallet.load(external, internal, p) } catch (e: Exception) { Wallet(external, internal, NETWORK, p) }
+        return p to w
     }
 
     private fun client(): ElectrumClient {
@@ -305,6 +336,9 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
         client = n; clientUrl = serverUrl
         return n
     }
+
+    /** Zahodí otevřené spojení s uzlem; další dotaz se připojí (a ověří certifikát) znovu. */
+    fun disconnect() { client = null; clientUrl = null }
 
     private fun <T> withClient(block: (ElectrumClient) -> T): T = try {
         block(client())
@@ -377,7 +411,20 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
 
     fun firstAddress(): String = wallet.peekAddress(KeychainKind.EXTERNAL, 0u).address.toString()
 
+    /** Kolik posledních vydaných přijímacích adres je za sebou nepoužitých. */
+    private fun unusedRun(): Int {
+        val last = wallet.derivationIndex(KeychainKind.EXTERNAL)?.toLong() ?: return 0
+        val unused = wallet.listUnusedAddresses(KeychainKind.EXTERNAL).map { it.index.toLong() }.toSet()
+        var n = 0
+        while (last - n >= 0 && (last - n) in unused) n++
+        return n
+    }
+
     fun newAddress(): String {
+        check(unusedRun() < ADDRESS_GAP) {
+            L("Máte už $ADDRESS_GAP nepoužitých adres za sebou. Další adresu by peněženka po obnově ze slov nemusela najít – nejdřív použijte některou z vydaných.",
+                "You already have $ADDRESS_GAP unused addresses in a row. A wallet restored from the words might not find a further one – use one of the issued addresses first.")
+        }
         val a = wallet.revealNextAddress(KeychainKind.EXTERNAL).address.toString()
         wallet.persist(persister)
         return a
@@ -434,8 +481,23 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
     /** Nepodepsaná transakce pro hardwarovou peněženku (PSBT, binárně podle BIP-174). */
     fun psbtBytes(p: PreparedTx): ByteArray = java.util.Base64.getDecoder().decode(p.psbt.serialize())
 
-    /** TXID připravené platby – podpis ho nemění (u SegWitu nepatří podpisy do TXID). */
-    fun preparedTxid(p: PreparedTx): String = p.psbt.extractTxUncheckedFeeRate().computeTxid().toString()
+    /**
+     * Je [signed] přesně transakce [prepared], jen s podpisy? Porovnává se všechno kromě podpisů: verze, locktime,
+     * vstupy (včetně sequence) a výstupy (částky a adresy). Samotné TXID nestačí – u adres začínajících 3
+     * (ypub, zabalený SegWit) ho podpis mění, takže by se tam shoda nikdy nenašla.
+     */
+    private fun sameUnsigned(prepared: org.bitcoindevkit.Transaction, signed: org.bitcoindevkit.Transaction): Boolean {
+        val a = prepared.input(); val b = signed.input()
+        val x = prepared.output(); val y = signed.output()
+        return prepared.version() == signed.version() && prepared.lockTime() == signed.lockTime() &&
+            a.size == b.size && a.indices.all { i ->
+                a[i].previousOutput.txid.toString() == b[i].previousOutput.txid.toString() &&
+                    a[i].previousOutput.vout == b[i].previousOutput.vout && a[i].sequence == b[i].sequence
+            } &&
+            x.size == y.size && x.indices.all { i ->
+                x[i].value.toSat() == y[i].value.toSat() && x[i].scriptPubkey.toBytes().contentEquals(y[i].scriptPubkey.toBytes())
+            }
+    }
 
     /**
      * Přijme podepsanou transakci z hardwarové peněženky (hotová transakce .txn, nebo podepsané PSBT –
@@ -448,7 +510,7 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
             check(r.couldFinalize) { L("Podepsaná transakce není kompletní (chybí podpis).", "The signed transaction is incomplete (a signature is missing).") }
             r.psbt.extractTx()
         }
-        check(tx.computeTxid().toString() == preparedTxid(p)) {
+        check(sameUnsigned(p.psbt.extractTxUncheckedFeeRate(), tx)) {
             L("Podepsaná transakce NEODPOVÍDÁ připravené platbě – neodesláno. Zkuste podepsat znovu.",
                 "The signed transaction DOES NOT match the prepared payment – not sent. Try signing again.")
         }
@@ -477,6 +539,12 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
         return txid
     }
 
+    /** Jen pro testy (SendCheckTest): vloží transakci, jako by ji peněženka viděla v mempoolu – bez uzlu. */
+    internal fun injectUnconfirmed(raw: ByteArray) {
+        wallet.applyUnconfirmedTxs(listOf(UnconfirmedTx(org.bitcoindevkit.Transaction(raw), (System.currentTimeMillis() / 1000).toULong())))
+        wallet.persist(persister)
+    }
+
     private fun isOwnTxKnown(txid: String): Boolean = try {
         withClient { it.transactionGetRaw(Txid.fromString(txid)) }; true
     } catch (_: Exception) { false }
@@ -485,7 +553,29 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
      * Urychlení nepotvrzené odeslané transakce (Replace-By-Fee): stejná platba, vyšší poplatek.
      * Příjemce dostane stejnou částku, poplatek navíc se vezme z drobných (u „poslat vše“ z odesílané částky).
      */
-    fun prepareBump(txid: String, feeRateSatVb: Long): PreparedBump {
+    /** Důvod, proč urychlení nešlo sestavit jen z povolených mincí. */
+    private class NotEnough(message: String) : IllegalArgumentException(message)
+
+    /**
+     * @param avoid mince jiné skupiny (KYC / bez KYC), které se na vyšší poplatek nemají přibírat. Když bez nich
+     *  prostředky nestačí, sestaví se urychlení i s nimi a vrátí se v [PreparedBump.mixedInputIds] – aby na to šlo upozornit.
+     */
+    fun prepareBump(txid: String, feeRateSatVb: Long, avoid: Set<String> = emptySet()): PreparedBump {
+        if (avoid.isEmpty()) return buildBump(txid, feeRateSatVb)
+        // BDK při urychlení neumí mince zakázat jinak než zmrazením: dočasně je zmrazíme (bez uložení) a hned zase uvolníme.
+        val temp = avoid.map { OutPoint(Txid.fromString(it.substringBefore(':')), it.substringAfter(':').toUInt()) }
+            .filter { !wallet.isOutpointLocked(it) }
+        val clean = try {
+            temp.forEach { wallet.lockOutpoint(it) }
+            buildBump(txid, feeRateSatVb)
+        } catch (e: NotEnough) { null } finally { temp.forEach { runCatching { wallet.unlockOutpoint(it) } } }
+        if (clean != null) return clean
+        val b = buildBump(txid, feeRateSatVb)
+        val used = b.psbt.extractTxUncheckedFeeRate().input().map { "${it.previousOutput.txid}:${it.previousOutput.vout}" }
+        return b.copy(mixedInputIds = used.filter { it in avoid })
+    }
+
+    private fun buildBump(txid: String, feeRateSatVb: Long): PreparedBump {
         check(!watchOnly) { L("Sledovací peněženka nemůže odesílat.", "A watch-only wallet can't send.") }
         require(feeRateSatVb in 1..500) { L("Poplatek musí být 1–500 sat/vB", "The fee must be 1–500 sat/vB") }
         val id = Txid.fromString(txid)
@@ -499,9 +589,9 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
         } catch (e: CreateTxException.FeeTooLow) {
             throw IllegalArgumentException(L("Nový poplatek je příliš nízký – zvyšte ho.", "The new fee is too low – raise it."))
         } catch (e: CreateTxException.CoinSelection) {
-            throw IllegalArgumentException(L("Na vyšší poplatek nemáte v peněžence dost prostředků.", "There aren't enough funds in the wallet for a higher fee."))
+            throw NotEnough(L("Na vyšší poplatek nemáte v peněžence dost prostředků.", "There aren't enough funds in the wallet for a higher fee."))
         } catch (e: CreateTxException.InsufficientFunds) {
-            throw IllegalArgumentException(L("Na vyšší poplatek nemáte v peněžence dost prostředků.", "There aren't enough funds in the wallet for a higher fee."))
+            throw NotEnough(L("Na vyšší poplatek nemáte v peněžence dost prostředků.", "There aren't enough funds in the wallet for a higher fee."))
         } catch (e: CreateTxException) {
             throw IllegalArgumentException(L("Transakci nelze urychlit (${e::class.simpleName}). Možná už je potvrzená – obnovte peněženku.", "The transaction can't be sped up (${e::class.simpleName}). Maybe it's already confirmed – refresh the wallet."))
         }

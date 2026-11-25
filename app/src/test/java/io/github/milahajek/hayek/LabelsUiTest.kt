@@ -30,6 +30,7 @@ class LabelsUiTest {
     }
     @Test fun successLn() = shot(6, "success_ln")
     @Test fun successOnchain() = shot(7, "success")
+    @Test fun pinNotice() = shot(10, "pin_notice")
     @Test fun passphraseInfo() = shot(8, "passphrase_info")
     @Test fun passphraseOn() = shot(9, "passphrase_on")
     @Test fun dustSection() = shot(3, "dust")
@@ -48,6 +49,7 @@ class LabelsUiTest {
                 HayekBackground {
                     if (dialog == 9) Column(Modifier.padding(20.dp)) { PassphraseSection(confirm = true, preview = "Kocour Mour 7") {} }
                     else if (dialog == 8) PassphraseInfoDialog {}
+                    else if (dialog == 10) PinNoticeDialog(vm, "10.0.0.5:50002", "3A:7F:12:9B:C4:55:E0:18:6D:A2:4B:90:F1:07:CE:38:52:AD:66:1E:B9:03:7C:D8:24:FA:91:5B:E6:0D:43:77")
                     else if (dialog == 6) SuccessOverlay(Success("Zaplaceno", "4 200 sat", lightning = true)) {}
                     else if (dialog == 7) SuccessOverlay(Success("Odesláno", "150 000 sat")) {}
                     else if (dialog == 5) { Column(Modifier.padding(20.dp)) { ContactHint(vm, "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g") }; ContactsDialog(vm, onDismiss = {}, onPick = {}) }

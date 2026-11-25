@@ -68,7 +68,10 @@ class MainActivity : FragmentActivity() {
     private val idleHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val idleCheck = object : Runnable {
         override fun run() {
-            if (vm.isOpen && !vm.busy && SystemClock.elapsedRealtime() - lastTouch > IDLE_LOCK_MS) vm.lockApp()
+            // Platí i při zakládání první peněženky: hody a slova nesmí zůstat na obrazovce bez dozoru.
+            // Opisování 24 slov trvá a obrazovky se při něm nikdo nedotýká, proto má zakládání delší lhůtu.
+            val limit = if (vm.isOpen) IDLE_LOCK_MS else 3 * IDLE_LOCK_MS
+            if ((vm.isOpen || vm.inSecretSetup) && !vm.busy && SystemClock.elapsedRealtime() - lastTouch > limit) vm.lockApp()
             idleHandler.postDelayed(this, 15_000)
         }
     }
@@ -99,7 +102,8 @@ class MainActivity : FragmentActivity() {
         super.onStart()
         // Po 2 minutách na pozadí se peněženka zamkne.
         val since = vm.backgroundSince
-        if (since != 0L && SystemClock.elapsedRealtime() - since > 120_000 && vm.isOpen) vm.lockApp()
+        val away = if (since != 0L) SystemClock.elapsedRealtime() - since else 0L
+        if ((vm.isOpen && away > 120_000) || (!vm.isOpen && vm.inSecretSetup && away > 600_000)) vm.lockApp()
         vm.backgroundSince = 0L
     }
 }
@@ -109,8 +113,10 @@ fun FragmentActivity.auth(vm: WalletViewModel, title: String, strong: Boolean = 
         vm.message = L("Nejdřív si v telefonu nastavte zámek obrazovky (PIN nebo otisk prstu). Bez něj peněženka nemůže bezpečně uložit klíče.", "First set a screen lock on your phone (PIN or fingerprint). Without it the wallet can't store the keys securely.")
         return
     }
-    if (strong && hasStrongBiometric(this) && vm.store.fingerprintsChanged()) {
-        // Někdo mohl přidat vlastní otisk (stačí k tomu znát PIN). Než otisku znovu uvěříme, ověříme slova.
+    // Otisky se změnily, nebo úplně zmizely (peněženka přitom otiskem chráněná byla): obojí jde udělat jen se znalostí PINu.
+    val tampered = if (hasStrongBiometric(this)) vm.store.fingerprintsChanged() else vm.store.bioSeen()
+    if (strong && tampered) {
+        // Než otisku (nebo samotnému PINu) znovu uvěříme, ověříme slova ze zálohy.
         vm.fingerprintCheck = { authenticate(this, title, strong, ok) { err -> vm.message = L("Ověření se nezdařilo: $err", "Verification failed: $err") } }
         return
     }
@@ -225,7 +231,14 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
         }
     }
 
+    // Při opisování slov a házení kostkou nesmí displej zhasnout (a peněženka mezitím zahodit rozpracované založení).
+    val view = androidx.compose.ui.platform.LocalView.current
+    val keepOn = vm.inSecretSetup
+    DisposableEffect(keepOn) { view.keepScreenOn = keepOn; onDispose { view.keepScreenOn = false } }
+
     vm.fingerprintCheck?.let { FingerprintCheckDialog(vm, act) }
+
+    if (vm.message == null && vm.success == null && vm.fingerprintCheck == null) vm.pinNotice?.let { (hostPort, fp) -> PinNoticeDialog(vm, hostPort, fp) }
 
     vm.success?.let { SuccessOverlay(it) { vm.success = null } }
 

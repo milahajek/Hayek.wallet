@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.milahajek.hayek"
         minSdk = 30
         targetSdk = 36
-        versionCode = 34
-        versionName = "1.16.2"
+        versionCode = 35
+        versionName = "1.17.0"
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 
@@ -49,6 +49,8 @@ android {
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 
 dependencies {
+    // Skutečná BDK i v testech na počítači (SeedVectorsTest) – stejný zdrojový kód jako androidová knihovna.
+    testImplementation("org.bitcoindevkit:bdk-jvm:3.1.1")
     testImplementation("org.robolectric:robolectric:4.18.1")
     testImplementation("io.github.takahirom.roborazzi:roborazzi:1.79.0")
     testImplementation("junit:junit:4.13.2")

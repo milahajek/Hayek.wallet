@@ -31,12 +31,35 @@ const val AUTHENTICATORS =
 class SecureStore(context: Context) {
     private val prefs = context.getSharedPreferences("secure", Context.MODE_PRIVATE)
     /** Alias klíče: starší instalace „seed_key_v1“ (TEE), nové a přesunuté klíče ve StrongBoxu „seed_key_sb…“. */
-    private var alias: String = prefs.getString("key_alias", null) ?: if (prefs.contains("seed")) "seed_key_v1" else "seed_key_sb1"
+    private var alias: String = prefs.getString("key_alias", null) ?: detectAlias()
+
+    /**
+     * Verze do 1.13.0 jméno klíče neukládaly. Nesmí se proto odvozovat z toho, jestli existuje záznam „seed“
+     * (ten zmizí smazáním první peněženky), ale z toho, který klíč v Keystore skutečně je. Nalezené jméno se hned uloží.
+     */
+    private fun detectAlias(): String {
+        val found = try {
+            val ks = keyStore()
+            listOf("seed_key_v1", "seed_key_sb1", "seed_key_sb2").firstOrNull { ks.containsAlias(it) }
+        } catch (_: Exception) { null }
+        if (found != null && hasAnySecret()) prefs.edit().putString("key_alias", found).commit()
+        return found ?: if (prefs.contains("seed")) "seed_key_v1" else "seed_key_sb1"
+    }
+
+    private fun hasAnySecret() = prefs.contains("seed") || prefs.all.keys.any { it.startsWith("x_") }
+
+    /** Názvy doplňkových zašifrovaných záznamů (další peněženky, Lightning). */
+    fun extraNames(): List<String> = prefs.all.keys.filter { it.startsWith("x_") && !it.endsWith("_iv") }.map { it.removePrefix("x_") }
 
     fun hasSeed() = prefs.contains("seed")
 
     /** Odstraní hlavní slot (když se maže peněženka, která v něm byla, a jiné zůstávají). */
-    fun removeSeed() { prefs.edit().remove("seed").remove("iv").commit() }
+    fun removeSeed() { prefs.edit().remove("seed").remove("iv").commit(); cancelRemoval("seed") }
+
+    // Mazání peněženky ve dvou krocích (záměr → smazání), aby se po pádu uprostřed dalo bezpečně dokončit.
+    fun pendingRemovals(): Set<String> = prefs.getStringSet("pending_removal", emptySet())!!.toSet()
+    fun planRemoval(slot: String) { prefs.edit().putStringSet("pending_removal", pendingRemovals() + slot).commit() }
+    fun cancelRemoval(slot: String) { if (slot in pendingRemovals()) prefs.edit().putStringSet("pending_removal", pendingRemovals() - slot).commit() }
 
     // ---------- Údaje pro práci na pozadí (upozornění na platby) ----------
     // Jen VEŘEJNÝ deskriptor (adresy, ne klíče). Šifrovaný klíčem bez ověření otiskem, aby ho šlo
@@ -156,6 +179,7 @@ class SecureStore(context: Context) {
         prefs.edit()
             .putString("x_$name", Base64.encodeToString(ct, Base64.NO_WRAP))
             .putString("x_${name}_iv", Base64.encodeToString(c.iv, Base64.NO_WRAP))
+            .putString("key_alias", alias)
             .commit()
     }
 
@@ -172,6 +196,7 @@ class SecureStore(context: Context) {
 
     fun removeExtra(name: String) {
         prefs.edit().remove("x_$name").remove("x_${name}_iv").commit()
+        cancelRemoval(name)
     }
 
     // ---- Hlídač otisků: pozná, že do telefonu někdo přidal nový otisk prstu ----
@@ -181,7 +206,10 @@ class SecureStore(context: Context) {
     fun ensureBioCanary() {
         try {
             val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-            if (ks.containsAlias(canaryAlias)) return
+            if (ks.containsAlias(canaryAlias)) { markBioSeen(); return }
+            // Hlídač už jednou existoval a teď chybí: nový se smí vytvořit až po ověření slov (resetBioCanary),
+            // jinak by si útočník po smazání otisků přidal vlastní a dostal čistý štít.
+            if (bioSeen()) return
             val spec = KeyGenParameterSpec.Builder(canaryAlias, KeyProperties.PURPOSE_ENCRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
@@ -190,24 +218,36 @@ class SecureStore(context: Context) {
                 .setInvalidatedByBiometricEnrollment(true)
                 .build()
             KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply { init(spec) }.generateKey()
+            markBioSeen()
         } catch (_: Exception) {
             // telefon bez otisku – hlídač nejde vytvořit, silné ověření pak stejně používá PIN
         }
     }
 
+    /**
+     * true = peněženka už někdy byla chráněná otiskem. Když pak v telefonu žádný otisk není, někdo je smazal
+     * (stačí k tomu PIN) – a než se spokojíme s PINem, musí uživatel prokázat, že zná svá slova.
+     */
+    fun bioSeen() = prefs.getBoolean("bio_seen", false)
+    private fun markBioSeen() { if (!bioSeen()) prefs.edit().putBoolean("bio_seen", true).commit() }
+
     /** true = od posledního ověření se změnily otisky prstů (někdo přidal / odebral otisk). */
     fun fingerprintsChanged(): Boolean = try {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         val k = ks.getKey(canaryAlias, null) as? SecretKey
-        if (k == null) false else { Cipher.getInstance("AES/GCM/NoPadding").init(Cipher.ENCRYPT_MODE, k); false }
+        if (k == null) bioSeen() else { Cipher.getInstance("AES/GCM/NoPadding").init(Cipher.ENCRYPT_MODE, k); false }
     } catch (e: KeyPermanentlyInvalidatedException) {
         true
+    } catch (e: java.security.UnrecoverableKeyException) {
+        true   // některé verze Androidu hlásí zneplatněný klíč už při načtení
     } catch (e: Exception) {
         false
     }
 
     fun resetBioCanary() {
         try { KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(canaryAlias) } catch (_: Exception) {}
+        // Majitel se prokázal slovy: stav bereme jako nový výchozí (bez otisku = PIN, s otiskem = nový hlídač).
+        prefs.edit().putBoolean("bio_seen", false).commit()
         ensureBioCanary()
     }
 

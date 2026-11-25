@@ -48,7 +48,7 @@ class IncognitoTest {
     }
 
     @Test fun verifyIsIncognito() {
-        assertTrue(incognito(editorInfoFor(Screen.Verify("abandon ".repeat(23) + "art", listOf(0, 5, 10)))))
+        assertTrue(incognito(editorInfoFor(Screen.Verify("abandon ".repeat(23) + "art"))))
     }
 
     @Test fun watchIsIncognito() {

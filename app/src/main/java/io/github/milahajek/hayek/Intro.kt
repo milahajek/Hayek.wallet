@@ -41,7 +41,7 @@ private fun pages() = listOf(
         listOf(
             L("Generátor náhody v telefonu nevidíte. Chyba v něm (už se to v minulosti stalo) nebo škodlivý software by mohly čísla oslabit – a nikdy byste se to nedozvěděli.", "You can't see the phone's random number generator. A bug in it (it has happened before) or malware could weaken the numbers – and you would never find out."),
             L("Kostka je fyzická náhoda, kterou máte pod kontrolou. Nikdo ji nemůže na dálku ovlivnit.", "A die is physical randomness under your control. Nobody can influence it remotely."),
-            L("99 hodů = 256 bitů náhody. To je víc možností, než je atomů ve viditelném vesmíru – uhodnout je nelze.", "99 rolls = 256 bits of randomness. That's more possibilities than atoms in the visible universe – impossible to guess."),
+            L("99 hodů = téměř 256 bitů náhody. To je víc možností, než je atomů ve viditelném vesmíru – uhodnout je nelze.", "99 rolls = almost 256 bits of randomness. That's more possibilities than atoms in the visible universe – impossible to guess."),
             L("Stejný postup používají hardwarové peněženky Coldcard a SeedSigner, takže výsledek si můžete ověřit i jinde.", "Coldcard and SeedSigner hardware wallets use the same method, so you can verify the result elsewhere too."),
         )
     ),

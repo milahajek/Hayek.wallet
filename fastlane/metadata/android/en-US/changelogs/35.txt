@@ -1,0 +1,1 @@
+Fixes after an independent security audit: fingerprint protection can no longer be bypassed by deleting fingerprints, the backup check verifies all 24 words, the node certificate is shown on first connection, fee bumps don't mix KYC and no-KYC coins, sending from watch-only wallets with addresses starting with 3, a fix for older installs with several wallets.

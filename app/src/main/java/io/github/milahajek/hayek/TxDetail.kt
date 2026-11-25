@@ -99,6 +99,12 @@ fun TxDetailDialog(tx: TxItem, vm: WalletViewModel, act: FragmentActivity) {
                             Text(L("Příjemce dostane: ${formatSat(b.recipientSat)}", "Recipient gets: ${formatSat(b.recipientSat)}"))
                             Text(L("Poplatek: ${formatSat(b.oldFeeSat)} → ${formatSat(b.newFeeSat)} (${b.feeRate} sat/vB)", "Fee: ${formatSat(b.oldFeeSat)} → ${formatSat(b.newFeeSat)} (${b.feeRate} sat/vB)"))
                             Text(L("Zaplatíte navíc: ${formatSat(b.newFeeSat - b.oldFeeSat)}", "You pay extra: ${formatSat(b.newFeeSat - b.oldFeeSat)}"), fontWeight = FontWeight.SemiBold)
+                            if (b.mixedInputIds.isNotEmpty()) {
+                                Spacer(Modifier.height(6.dp))
+                                Text(L("⚠ Na vyšší poplatek nestačí drobné z této platby ani mince stejné skupiny. Přibere se ${b.mixedInputIds.size}× mince z JINÉ skupiny (KYC / bez KYC) – tím se obě skupiny na blockchainu propojí. Když to nechcete, zvolte nižší poplatek nebo urychlení zrušte.",
+                                    "⚠ The change from this payment and coins of the same group aren't enough for the higher fee. ${b.mixedInputIds.size} coin(s) from a DIFFERENT group (KYC / no KYC) will be added – this links both groups on the blockchain. If you don't want that, choose a lower fee or cancel the speed-up."),
+                                    color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
+                            }
                         }
                     }
                     Spacer(Modifier.height(8.dp))

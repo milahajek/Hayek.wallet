@@ -24,7 +24,7 @@ sealed interface Screen {
     data class Intro(val back: Screen) : Screen
     data object Dice : Screen
     data class ShowSeed(val words: String) : Screen
-    data class Verify(val words: String, val positions: List<Int>) : Screen
+    data class Verify(val words: String) : Screen
     data object Restore : Screen
     data object WatchImport : Screen
     data object Coins : Screen
@@ -406,7 +406,10 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         val c = core ?: return@run
         val tx = txDetail ?: return@run
         val r = rate.trim().toLongOrNull() ?: throw IllegalArgumentException(L("Zadejte poplatek v sat/vB.", "Enter the fee in sat/vB."))
-        bumpPrepared = lock.withLock { withContext(Dispatchers.IO) { c.prepareBump(tx.txid, r) } }
+        // Na vyšší poplatek se nemají přibírat mince jiné skupiny (KYC / bez KYC), než ze kterých se platilo.
+        val group = tagRaw("t:${tx.txid}") ?: CoinTag.keyOf(null)
+        val avoid = coins.filter { !it.frozen && it.txid != tx.txid && coinTagKey(it) != group }.map { it.id }.toSet()
+        bumpPrepared = lock.withLock { withContext(Dispatchers.IO) { c.prepareBump(tx.txid, r, avoid) } }
     }
 
     /** Volat až po ověření otiskem. */
@@ -415,7 +418,10 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         val b = bumpPrepared ?: return@run
         val newId = lock.withLock { withContext(Dispatchers.IO) { c.signAndBroadcastBump(b) } }
         note(b.oldTxid).takeIf { it.isNotBlank() }?.let { setNote(newId, it) }
-        tagRaw("t:${b.oldTxid}")?.let { tagPrefs.edit().putString("t:$newId", it).apply(); tagsVersion++; labelChanged() }
+        // Drobné zdědí značku původní platby; když se musely přibrat mince jiné skupiny, platí značka směsi.
+        val tags = listOf(CoinTag.of(tagRaw("t:${b.oldTxid}"))) + b.mixedInputIds.map { id -> coins.find { it.id == id }?.let { coinTag(it) } }
+        val newTag = if (b.mixedInputIds.isEmpty()) tags[0] else combineTags(tags)
+        newTag?.let { tagPrefs.edit().putString("t:$newId", it.key).apply(); tagsVersion++; labelChanged() }
         bumpPrepared = null; txDetail = null
         success = Success(L("Poplatek zvýšen", "Fee raised"))
         message = L("Poplatek zvýšen ✔\nNová transakce nahradila původní.\nTXID: $newId", "Fee raised ✔\nThe new transaction replaced the original.\nTXID: $newId")
@@ -474,7 +480,19 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         override fun get(hostPort: String) = prefs.getString("pin:$hostPort", null)
         override fun set(hostPort: String, fingerprint: String) {
             prefs.edit().putString("pin:$hostPort", fingerprint).apply()
+            // První spojení: certifikátu se uvěřilo naslepo, tak ho aspoň ukážeme k porovnání s uzlem.
+            if (!hostPort.startsWith("ln:")) pinNotice = hostPort to fingerprint
         }
+    }
+    /** Právě nově uložený certifikát uzlu (adresa, otisk) – zobrazí se k porovnání. */
+    var pinNotice by mutableStateOf<Pair<String, String>?>(null)
+    fun rejectPin(hostPort: String) {
+        prefs.edit().remove("pin:$hostPort").apply(); pinVersion++; pinNotice = null; connected = false
+        // Odmítnutý server se nesmí dál používat přes už otevřené spojení.
+        cores.values.forEach { it.disconnect() }
+        PinnedRelay.forget(hostPort)
+        message = L("Certifikát zapomenut.\n\nZkontrolujte, že jste ve vlastní síti (ne na cizí Wi-Fi) a že adresa uzlu v Nastavení je správná. Při dalším spojení se certifikát uloží znovu a aplikace vám ho opět ukáže k porovnání.",
+            "Certificate forgotten.\n\nMake sure you're on your own network (not a foreign Wi-Fi) and that the node address in Settings is correct. On the next connection the certificate is saved again and shown to you for comparison.")
     }
 
     /** Otisk certifikátu uloženého pro aktuální server (null = zatím žádný nebo tcp). */
@@ -494,9 +512,11 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     val walletFingerprint: String? get() = Passphrase.fingerprint(runCatching { core?.publicDescriptor() }.getOrNull())
     /** Heslo navíc pro právě zakládanou peněženku z kostek (jen v paměti do uložení). */
     var newPassphrase by mutableStateOf<String?>(null)
-    /** Peněženka, jejíž slova se ověřují po změně otisků: zobrazená, a když je jen sledovací, první kapesní. */
-    val checkWalletId: String? get() = activeId.takeIf { cores[it]?.mnemonicWords != null }
-        ?: wallets.firstOrNull { cores[it.id]?.mnemonicWords != null }?.id
+    /**
+     * Peněženka, jejíž slova se ověřují po změně otisků: vždy NEJSTARŠÍ kapesní. Ne zobrazená – jinak by si zloděj
+     * se znalostí PINu přidal vlastní peněženku a „prokázal se“ jejími slovy.
+     */
+    val checkWalletId: String? get() = wallets.firstOrNull { cores[it.id]?.mnemonicWords != null }?.id
     val checkWords: String? get() = checkWalletId?.let { cores[it]?.mnemonicWords }
     val isOpen get() = core != null
     val watchOnly get() = core?.watchOnly == true
@@ -570,15 +590,34 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         // Typ peněženky podle skutečného obsahu (u převedené staré instalace ho předem neznáme).
         val fixed = wallets.map { w -> secrets[w.id]?.let { sec -> w.copy(kind = if (sec.startsWith(WalletCore.WATCH_PREFIX)) "watch" else "hot") } ?: w }
         if (fixed != wallets || !prefs.contains("wallets")) saveWallets(fixed)
+        // Úklid po nedokončeném mazání (pád mezi uložením seznamu a smazáním tajemství): záznamy, které už žádné peněžence nepatří.
+        // Maže se jen to, co bylo výslovně určeno ke smazání a co už v seznamu peněženek není – nikdy „cokoli navíc“.
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val used = wallets.map { it.slot }.toSet()
+                store.pendingRemovals().forEach { slot ->
+                    if (slot in used) store.cancelRemoval(slot)
+                    else if (slot == WalletRegistry.SLOT_SEED) store.removeSeed() else store.removeExtra(slot)
+                }
+            }
+        }
+        var resetNote: String? = null
         for (w in wallets) {
             val sec = secrets[w.id] ?: continue
             val c = withContext(Dispatchers.IO) { runCatching { WalletCore(dbFile(w.id), sec, serverUrl, pins).also { it.state() } }.getOrNull() } ?: continue
+            if (c.dbReset) {
+                // Zmrazení mincí bylo v poškozené databázi: prach se při načtení zmrazí znovu, ruční zmrazení musí uživatel obnovit.
+                sp(WalletRegistry.walletPrefs(w.id)).edit().remove("dust_seen").apply()
+                resetNote = L("ℹ Místní data peněženky „${walletName(w)}“ byla poškozená, načítám je znovu z uzlu. O peníze ani slova nejde. Pokud jste měli ručně zmrazené mince, zmrazte je prosím znovu (Mince ❄).",
+                    "ℹ The local data of wallet „${walletName(w)}“ was damaged and is being reloaded from the node. Your money and words are safe. If you had manually frozen coins, please freeze them again (Coins ❄).")
+            }
             cores[w.id] = c
             remember(w.id, withContext(Dispatchers.IO) { c.state() })
         }
         if (cores.isEmpty()) { lnConfig = null; throw IllegalStateException(L("Peněženku se nepodařilo otevřít. Zkuste aplikaci zavřít a odemknout znovu.", "Couldn't open the wallet. Try closing the app and unlocking again.")) }
         if (cores.size < wallets.size) message = L("⚠ Peněženku „${wallets.filter { it.id !in cores }.joinToString { walletName(it) }}“ se nepodařilo otevřít. Ostatní fungují; nefunkční můžete odebrat v ⚙ Nastavení → Peněženky.",
             "⚠ Couldn't open wallet „${wallets.filter { it.id !in cores }.joinToString { walletName(it) }}“. The others work; you can remove it in ⚙ Settings → Wallets.")
+        else resetNote?.let { message = it }
         if (activeId !in cores) cores.keys.firstOrNull()?.let { activeId = it }
         activate(activeId)
         screen = Screen.Home
@@ -600,10 +639,8 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun goVerify(words: String) {
-        val pos = (0 until 24).shuffled().take(3).sorted()
-        screen = Screen.Verify(words, pos)
-    }
+    /** Kontrola zálohy: zadává se všech 24 slov (překlep v kterémkoli by se jinak projevil až při obnově). */
+    fun goVerify(words: String) { screen = Screen.Verify(words) }
 
     /** Začít zakládat další peněženku (zpět se jde do aplikace). */
     fun startAddWallet() { adding = true; screen = Screen.Welcome }
@@ -612,7 +649,10 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     /** Volat až po ověření – uloží zašifrovanou frázi (nebo sledovací klíč) a otevře peněženku. */
     fun saveAndOpen(words: String, restored: Boolean = false) = run {
         val first = wallets.isEmpty()
-        val id = if (first) WalletRegistry.PRIMARY_ID else WalletRegistry.newId(wallets)
+        // Číslo se nikdy nepoužije dvakrát (ani po smazání), aby se data staré a nové peněženky nemohla potkat.
+        val id = if (first) WalletRegistry.PRIMARY_ID else WalletRegistry.newId(wallets, prefs.getInt("wallet_seq", 1)).also {
+            prefs.edit().putInt("wallet_seq", it.removePrefix("w").toIntOrNull() ?: 1).commit()
+        }
         val kind = if (words.startsWith(WalletCore.WATCH_PREFIX)) "watch" else "hot"
         val slot = if (first) WalletRegistry.SLOT_SEED else "wallet_$id"
         val db = dbFile(id)
@@ -864,6 +904,9 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     /** Akce čekající na ověření slov poté, co se v telefonu změnily otisky prstů. */
     var fingerprintCheck by mutableStateOf<(() -> Unit)?>(null)
 
+    /** Obrazovky, na kterých jsou vidět hody nebo slova nové peněženky. */
+    val inSecretSetup: Boolean get() = screen == Screen.Dice || screen == Screen.Restore || screen is Screen.ShowSeed || screen is Screen.Verify
+
     fun lockApp() {
         lnClear()
         core = null
@@ -875,8 +918,9 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         revealSeed = false
         prepared = null
         // Nic citlivého nesmí zůstat vidět nad zámkem ani se po odemčení vrátit.
-        message = null; txDetail = null; bumpPrepared = null; rolls = ""; fingerprintCheck = null
-        if (hasWallet) screen = Screen.Locked
+        message = null; txDetail = null; bumpPrepared = null; rolls = ""; fingerprintCheck = null; pinNotice = null
+        // Ani při zakládání úplně první peněženky nesmí hody a slova zůstat na obrazovce donekonečna.
+        if (hasWallet) screen = Screen.Locked else if (inSecretSetup) screen = Screen.Welcome
     }
 
     /**
@@ -895,7 +939,10 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         val name = walletName(w)
         if (newList.isEmpty()) { deleteEverything(); return }
         if (busy) { message = L("Chvilku – dokončuji předchozí akci.", "One moment – finishing the previous action."); return }
-        // Nejdřív seznam (commit), pak tajemství: při pádu uprostřed zůstane nanejvýš nepoužitý šifrovaný záznam, nikdy záměna.
+        // Číslo smazané peněženky se už nepřidělí znovu.
+        id.removePrefix("w").toIntOrNull()?.let { n -> if (n > prefs.getInt("wallet_seq", 1)) prefs.edit().putInt("wallet_seq", n).commit() }
+        // Nejdřív seznam (commit), pak tajemství: při pádu uprostřed zůstane nanejvýš nepoužitý šifrovaný záznam (uklidí se při příštím odemčení), nikdy záměna.
+        store.planRemoval(w.slot)
         saveWallets(newList)
         try { if (w.slot == WalletRegistry.SLOT_SEED) store.removeSeed() else store.removeExtra(w.slot) } catch (_: Exception) {}
         cores.remove(id); states.remove(id); balances = balances - id
