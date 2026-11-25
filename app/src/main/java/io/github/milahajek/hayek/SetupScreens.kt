@@ -82,7 +82,7 @@ fun WelcomeScreen(vm: WalletViewModel) {
                 textAlign = TextAlign.Center, fontSize = 14.sp
             )
         } else Text(
-            L("Pracuje se skutečnými bitcoiny a připojuje se jen k vašemu vlastnímu uzlu. Používejte ji jen na malé částky.", "It works with real bitcoin and connects only to your own node. Use it only for small amounts."),
+            L("Pracuje se skutečnými bitcoiny. Připojuje se jen tam, kam ji sami pošlete – k vašemu uzlu, nebo k veřejnému serveru, který si vyberete. Používejte ji jen na malé částky.", "It works with real bitcoin. It connects only where you send it – to your own node, or to a public server you choose. Use it only for small amounts."),
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(28.dp))
@@ -102,7 +102,10 @@ fun WelcomeScreen(vm: WalletViewModel) {
             Icon(Icons.Default.School, null); Spacer(Modifier.width(6.dp)); Text(L("Průvodce – proč kostky a jak na to", "Guide – why dice and how it works"))
         }
         Spacer(Modifier.height(12.dp))
-        if (!vm.adding) Text(L("Server: ${vm.serverUrl.ifBlank { "zatím nenastaven (zadáte v ⚙ Nastavení)" }}", "Server: ${vm.serverUrl.ifBlank { "not set yet (enter it in ⚙ Settings)" }}"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!vm.adding) {
+            if (vm.serverUrl.isBlank()) TextButton(onClick = { vm.screen = Screen.ServerSetup }) { Text(L("Server zatím není nastaven – nastavit", "No server set yet – set it up")) }
+            else Text(L("Server: ${vm.serverUrl}", "Server: ${vm.serverUrl}") + if (isPublicServer(vm.serverUrl)) L(" (veřejný)", " (public)") else "", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

@@ -32,7 +32,7 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
     var url by remember { mutableStateOf(vm.serverUrl) }
     var confirmDelete by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
-        Text(L("Váš uzel (Electrum server)", "Your node (Electrum server)"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(L("Server (váš uzel nebo veřejný)", "Server (your node or a public one)"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Text(L("Na RaspiBlitzu: Fulcrum ssl://IP:50022 (tcp 50021), ElectRS ssl://IP:50002 (tcp 50001).", "On RaspiBlitz: Fulcrum ssl://IP:50022 (tcp 50021), ElectRS ssl://IP:50002 (tcp 50001)."), fontSize = 14.sp)
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(value = url, onValueChange = { url = it.trim() }, label = { Text(L("Adresa serveru", "Server address")) },
@@ -103,39 +103,14 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
             Icon(Icons.Default.Public, null); Spacer(Modifier.width(6.dp)); Text(L("Nemám vlastní uzel – veřejný server", "I have no node – public server"))
         }
         if (pickPublic) {
-            var understood by remember { mutableStateOf(false) }
             AlertDialog(
                 onDismissRequest = { pickPublic = false },
                 title = { Text(L("Veřejný server", "Public server")) },
                 text = {
                     Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
-                        Text(
-                            L("Server cizího provozovatele uvidí:\n• všechny adresy této peněženky a že patří k sobě,\n• zůstatek a celou historii plateb,\n• vaši IP adresu.\n\n", "The operator of a foreign server will see:\n• all addresses of this wallet and that they belong together,\n• the balance and full payment history,\n• your IP address.\n\n") +
-                                L("Nedostane se ke klíčům ani ke slovům a nemůže nic utratit. Mohl by ale zatajit transakci nebo ukázat nesprávný zůstatek.\n\n", "They can't reach the keys or words and can't spend anything. But they could hide a transaction or show a wrong balance.\n\n") +
-                                L("Seznam serverů je převzatý z peněženky Sparrow.", "The server list is taken from Sparrow wallet."),
-                            fontSize = 14.sp
-                        )
-                        Row(Modifier.fillMaxWidth().clickable { understood = !understood }, verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = understood, onCheckedChange = { understood = it })
-                            Text(L("Rozumím a přesto chci veřejný server", "I understand and still want a public server"), fontSize = 14.sp)
-                        }
-                        if (understood) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(L("„Vyzkoušet“ server jen otestuje (neposílá mu vaše adresy). „Použít“ ho uloží.", "„Test“ only tests the server (doesn't send it your addresses). „Use“ saves it."),
-                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            PUBLIC_SERVERS.forEach { (name, u) ->
-                                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text(name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                        Text(u.removePrefix("ssl://"), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-                                    }
-                                    TextButton(onClick = { pickPublic = false; vm.testServer(u) }) { Text(L("Vyzkoušet", "Test")) }
-                                    TextButton(onClick = {
-                                        url = u; pickPublic = false; if (vm.isOpen) act.auth(vm, L("Změnit server", "Change server")) { vm.setServer(u) } else vm.setServer(u)
-                                        vm.message = L("Peněženka teď používá veřejný server $name.\nNa svůj uzel se vrátíte zadáním jeho adresy a Uložit.", "The wallet now uses the public server $name.\nTo return to your node, enter its address and Save.")
-                                    }) { Text(L("Použít", "Use")) }
-                                }
-                            }
+                        PublicServerPicker(vm) { name, u ->
+                            url = u; pickPublic = false; if (vm.isOpen) act.auth(vm, L("Změnit server", "Change server")) { vm.setServer(u) } else vm.setServer(u)
+                            vm.message = L("Peněženka teď používá veřejný server $name.\nNa svůj uzel se vrátíte zadáním jeho adresy a Uložit.", "The wallet now uses the public server $name.\nTo return to your node, enter its address and Save.")
                         }
                     }
                 },

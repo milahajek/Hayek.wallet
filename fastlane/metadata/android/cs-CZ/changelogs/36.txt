@@ -1,0 +1,1 @@
+Při prvním spuštění si vyberete, kam se peněženka připojí: k vlastnímu uzlu (doporučeno), nebo k veřejnému serveru – s jasným vysvětlením, co jeho provozovatel uvidí. Peněženka tak funguje hned po instalaci i bez vlastního uzlu.

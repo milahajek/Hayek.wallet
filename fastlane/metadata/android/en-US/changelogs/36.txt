@@ -1,0 +1,1 @@
+On first launch you choose where the wallet connects: your own node (recommended) or a public server – with a clear explanation of what its operator will see. The wallet now works right after install even without your own node.

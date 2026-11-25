@@ -141,10 +141,11 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
             screen == Screen.LnPay || screen == Screen.LnReceive -> vm.openLightning()
             screen in inWallet -> { vm.revealSeed = false; vm.screen = if (vm.isOpen) Screen.Home else if (vm.hasWallet) Screen.Locked else Screen.Welcome }
             screen is Screen.Verify -> vm.screen = Screen.ShowSeed(screen.words)
+            screen == Screen.ServerSetup -> vm.skipServerSetup()
             setup -> vm.screen = Screen.Welcome
         }
     }
-    if (screen in inWallet || setup || screen is Screen.Intro || (screen == Screen.Welcome && vm.adding)) BackHandler { back() }
+    if (screen in inWallet || setup || screen is Screen.Intro || screen == Screen.ServerSetup || (screen == Screen.Welcome && vm.adding)) BackHandler { back() }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -208,6 +209,7 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
             when (s) {
                 Screen.Locked -> LockedScreen(vm, act)
                 Screen.Welcome -> WelcomeScreen(vm)
+                Screen.ServerSetup -> ServerSetupScreen(vm)
                 is Screen.Intro -> IntroScreen(vm, s.back)
                 Screen.Dice -> DiceScreen(vm)
                 is Screen.ShowSeed -> ShowSeedScreen(s.words, vm)

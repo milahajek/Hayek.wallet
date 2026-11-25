@@ -20,6 +20,8 @@ import java.io.File
 sealed interface Screen {
     data object Locked : Screen
     data object Welcome : Screen
+    /** První spuštění: výběr serveru (vlastní uzel / veřejný). */
+    data object ServerSetup : Screen
     /** Úvodní průvodce; [back] = kam se vrátit. */
     data class Intro(val back: Screen) : Screen
     data object Dice : Screen
@@ -188,11 +190,25 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         when {
             wallets.isNotEmpty() || store.hasSeed() -> Screen.Locked
             !prefs.getBoolean("intro_seen", false) -> Screen.Intro(Screen.Welcome)
+            needServerSetup() -> Screen.ServerSetup
             else -> Screen.Welcome
         }
     )
 
-    fun finishIntro(back: Screen) { prefs.edit().putBoolean("intro_seen", true).apply(); screen = back }
+    /** Nová instalace bez nastaveného serveru: než se založí peněženka, zeptáme se, kam se připojovat. */
+    private fun needServerSetup() = prefs.getString("server", DEFAULT_SERVER).isNullOrBlank() && !prefs.getBoolean("server_asked", false)
+
+    fun finishIntro(back: Screen) {
+        prefs.edit().putBoolean("intro_seen", true).apply()
+        screen = if (back == Screen.Welcome && !hasWallet && needServerSetup()) Screen.ServerSetup else back
+    }
+
+    /** Volba serveru při prvním spuštění (peněženka ještě neexistuje, není co chránit ověřením). */
+    fun chooseServer(url: String) {
+        try { ServerAddr.parse(url) } catch (e: Exception) { message = e.message; return }
+        setServer(url); skipServerSetup()
+    }
+    fun skipServerSetup() { prefs.edit().putBoolean("server_asked", true).apply(); screen = if (isOpen) Screen.Home else Screen.Welcome }
 
     // ---------- Skrytí zůstatku ----------
     var hideBalance by mutableStateOf(prefs.getBoolean("hide_balance", false))
@@ -551,7 +567,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             tcpOnTls -> L("Spojení se hned přerušilo. Nejspíš jste zadali tcp:// na šifrovaný port.\n\n", "The connection dropped immediately. You probably entered tcp:// for an encrypted port.\n\n") +
                 L("Na RaspiBlitzu: šifrovaně ssl://IP:50022 (Fulcrum) nebo ssl://IP:50002 (ElectRS), ", "On RaspiBlitz: encrypted ssl://IP:50022 (Fulcrum) or ssl://IP:50002 (ElectRS), ") +
                 L("nešifrovaně tcp://IP:50021 (Fulcrum) nebo tcp://IP:50001 (ElectRS).\n\nDetail: $m", "unencrypted tcp://IP:50021 (Fulcrum) or tcp://IP:50001 (ElectRS).\n\nDetail: $m")
-            m == NO_SERVER -> L("Peněženka ještě neví, ke kterému uzlu se připojit.\n\nV ⚙ Nastavení zadejte adresu svého Electrum serveru (Fulcrum nebo ElectRS), např. ssl://192.168.0.10:50002.", "The wallet doesn't know which node to connect to yet.\n\nIn ⚙ Settings enter your Electrum server address (Fulcrum or ElectRS), e.g. ssl://192.168.0.10:50002.")
+            m == NO_SERVER -> L("Peněženka ještě neví, kam se připojit.\n\nV ⚙ Nastavení zadejte adresu svého Electrum serveru (Fulcrum nebo ElectRS), např. ssl://192.168.0.10:50002 – nebo tam zvolte veřejný server, pokud vlastní uzel nemáte.", "The wallet doesn't know where to connect yet.\n\nIn ⚙ Settings enter your Electrum server address (Fulcrum or ElectRS), e.g. ssl://192.168.0.10:50002 – or choose a public server there if you don't have your own node.")
             m.contains("Insufficient funds", true) -> L("Nedostatek prostředků (včetně poplatku).", "Insufficient funds (including the fee).")
             m.contains("dust", true) -> L("Částka je příliš malá (pod limitem sítě).", "The amount is too small (below the network limit).")
             cls.contains("Electrum") || m.contains("connection", true) || m.contains("timed out", true) ||

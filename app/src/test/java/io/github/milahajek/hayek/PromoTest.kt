@@ -94,5 +94,6 @@ class PromoTest {
     @Test fun p14_new_seed() = shoot("p14_new_seed") { base(it); it.screen = Screen.ShowSeed("abandon ".repeat(23) + "art") }
     @Test fun p15_restore() = shoot("p15_restore") { base(it); it.screen = Screen.Restore }
     @Test fun p16_verify() = shoot("p16_verify") { base(it); it.screen = Screen.Verify("abandon ".repeat(23) + "art") }
+    @Test fun p18_server_setup() = shoot("p18_server_setup") { it.screen = Screen.ServerSetup }
     @Test fun p4_send() = shoot("p4_send") { base(it); it.feeEstimates = FeeEstimates(14, 6, 2); it.chooseFee(FeeChoice.NORMAL); it.screen = Screen.Send }
 }
