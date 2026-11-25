@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.milahajek.hayek"
         minSdk = 30
         targetSdk = 36
-        versionCode = 39
-        versionName = "1.18.3"
+        versionCode = 40
+        versionName = "1.18.4"
         // Sestavení pro Google Play (./gradlew bundleRelease -Pplay): sekce „Podpořit vývoj“ jen s QR kódem
         // a adresou, bez tlačítka „Přispět“ (pravidla Play pro platby v aplikacích). Verze z GitHubu ho má dál.
         buildConfigField("boolean", "PLAY", project.hasProperty("play").toString())

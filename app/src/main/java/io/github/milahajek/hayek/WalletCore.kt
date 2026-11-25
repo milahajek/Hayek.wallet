@@ -46,6 +46,8 @@ const val DONATION_ADDRESS = "bc1qwnqafccacrx0cnfuqdr5sr0scjzeacpw8srt8a"
 
 /** Žádný výchozí server – každý uživatel zadá svůj vlastní uzel (nebo si vědomě vybere veřejný). */
 const val DEFAULT_SERVER = ""
+/** Zásady ochrany soukromí (stejný odkaz je v záznamu na Google Play). Otevírá se v prohlížeči jen na klepnutí. */
+const val PRIVACY_URL = "https://github.com/milahajek/Hayek.wallet/blob/main/PRIVACY.md"
 const val NO_SERVER = "NO_SERVER"
 /** Mempool na vlastním RaspiBlitzu (HTTP 4080, HTTPS 4081). */
 const val DEFAULT_EXPLORER = ""

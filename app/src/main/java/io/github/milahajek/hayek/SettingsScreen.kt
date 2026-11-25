@@ -235,6 +235,12 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
                 Icon(Icons.Default.Favorite, null); Spacer(Modifier.width(6.dp)); Text(L("Přispět", "Donate"))
             }
         }
+        Spacer(Modifier.height(12.dp))
+        Text(L("Aplikace nesbírá žádné údaje – nemá účty, analytiku ani reklamy.", "The app collects no data – no accounts, analytics or ads."),
+            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally), textAlign = TextAlign.Center)
+        TextButton(onClick = { openUrl(ctx, PRIVACY_URL) }, Modifier.align(Alignment.CenterHorizontally)) {
+            Icon(Icons.AutoMirrored.Filled.OpenInNew, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(L("Zásady ochrany soukromí", "Privacy policy"))
+        }
         Spacer(Modifier.height(24.dp))
     }
     if (confirmDelete) {
