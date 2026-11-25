@@ -12,3 +12,23 @@ class BackupCheckTest {
         assertEquals(true, wordMatches("art", "art")); assertNull(wordMatches("art", "artist")); assertEquals(false, wordMatches("arti", "art"))
     }
 }
+
+class Bip39WordsTest {
+    private val file = java.io.File("src/main/assets/bip39_english.txt")
+    private val words = file.readLines().filter { it.isNotBlank() }
+
+    @Test fun officialWordlist() {
+        assertEquals(2048, words.size); assertEquals(words.sorted(), words)
+        val sha = java.security.MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+        assertEquals(Bip39Words.SHA256, sha)
+        // první 4 písmena jsou jednoznačná – na tom stojí wordMatches()
+        assertEquals(2048, words.map { it.take(4) }.toSet().size)
+    }
+
+    @Test fun suggestions() {
+        assertTrue(Bip39Words.suggest(words, "a").isEmpty())
+        assertEquals(listOf("abandon", "ability", "able", "about", "above", "absent", "absorb", "abstract"), Bip39Words.suggest(words, "ab"))
+        assertEquals(listOf("abandon"), Bip39Words.suggest(words, " ABAN "))
+        assertTrue(Bip39Words.suggest(words, "zzz").isEmpty())
+    }
+}

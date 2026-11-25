@@ -1,5 +1,6 @@
 package io.github.milahajek.hayek
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.foundation.Image
@@ -221,28 +222,34 @@ fun ShowSeedScreen(words: String, vm: WalletViewModel) {
 @Composable
 fun VerifyScreen(s: Screen.Verify, vm: WalletViewModel, act: FragmentActivity) {
     val list = s.words.split(" ")
-    var idx by remember(s) { mutableIntStateOf(0) }
+    // Slova se ptáme v náhodném pořadí: nejde je jen mechanicky opsat, je potřeba je na papíře opravdu najít.
+    val order = remember(s) { list.indices.shuffled() }
+    var step by remember(s) { mutableIntStateOf(0) }
+    val idx = order.getOrElse(step) { 0 }
+    val dictionary = Bip39Words.load(LocalContext.current)
     var input by remember(s) { mutableStateOf("") }
     val pass = vm.newPassphrase
     var passAgain by remember(s) { mutableStateOf("") }
     var showPass by remember { mutableStateOf(false) }
-    val done = idx >= list.size
+    val done = step >= list.size
     var wrong by remember(s) { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     // Slovo se potvrzuje mezerou nebo klávesou Další: teprve pak se porovná (nic se nepotvrdí předčasně ani „nepřeteče“ do dalšího pole).
     fun confirm() {
-        if (idx >= list.size || input.isBlank()) return
-        if (wordMatches(input, list[idx]) == true) { idx++; input = ""; wrong = false } else wrong = true
+        if (step >= list.size || input.isBlank()) return
+        if (wordMatches(input, list[idx]) == true) { step++; input = ""; wrong = false } else wrong = true
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text(L("Kontrola zálohy", "Backup check"), fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Text(L("Opište ze svého papíru všech ${list.size} slov, jedno po druhém. Každé potvrďte mezerou. Stačí i první 4 písmena.",
-            "Type all ${list.size} words from your paper, one by one. Confirm each with a space. The first 4 letters are enough."))
+        Text(L("Najděte na svém papíře slovo s daným číslem a napište ho. Ptám se na všech ${list.size} slov v náhodném pořadí. Stačí pár písmen a vybrat z nabídky.",
+            "Find the word with the given number on your paper and type it. I ask for all ${list.size} words in random order. A few letters and a tap on a suggestion are enough."))
         Spacer(Modifier.height(12.dp))
-        LinearProgressIndicator(progress = { idx / list.size.toFloat() }, modifier = Modifier.fillMaxWidth())
+        LinearProgressIndicator(progress = { step / list.size.toFloat() }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(6.dp))
         if (!done) {
-            Text(L("Slovo ${idx + 1} z ${list.size}", "Word ${idx + 1} of ${list.size}"), fontWeight = FontWeight.SemiBold)
+            Text(L("Hotovo ${step} z ${list.size}", "Done ${step} of ${list.size}"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(10.dp))
+            Text(L("Napište slovo č. ${idx + 1}", "Type word #${idx + 1}"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
@@ -260,7 +267,12 @@ fun VerifyScreen(s: Screen.Verify, vm: WalletViewModel, act: FragmentActivity) {
                 Spacer(Modifier.width(8.dp))
                 HayekButton(onClick = { confirm() }, enabled = input.isNotBlank()) { Text(L("Další", "Next")) }
             }
-            LaunchedEffect(idx) { runCatching { focus.requestFocus() } }
+            LaunchedEffect(step) { runCatching { focus.requestFocus() } }
+            // Našeptávání ze slovníku BIP39 – jen podle napsaných písmen.
+            val hints = remember(input) { Bip39Words.suggest(dictionary, input) }
+            if (hints.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                hints.forEach { w -> SuggestionChip(onClick = { input = w; confirm() }, label = { Text(w, fontFamily = FontFamily.Monospace) }) }
+            }
             if (wrong) {
                 Spacer(Modifier.height(6.dp))
                 Text(L("Tohle nesedí se slovem č. ${idx + 1}. Porovnejte ho se svým papírem – chyba v záloze by se jinak ukázala až při obnově.",

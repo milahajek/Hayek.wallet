@@ -1,0 +1,1 @@
+Backup check: words are asked in random order and suggested from the standard BIP39 wordlist as you type.

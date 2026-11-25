@@ -1,0 +1,1 @@
+Kontrola zálohy: slova se ptají v náhodném pořadí a při psaní je našeptává standardní slovník BIP39.
