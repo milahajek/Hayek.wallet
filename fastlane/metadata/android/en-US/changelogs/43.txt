@@ -1,0 +1,1 @@
+• Coin spending cost: the Coins screen shows what each coin costs to spend and what share of its value goes to fees. A slider shows the cost at high fees; coins not worth spending are highlighted.

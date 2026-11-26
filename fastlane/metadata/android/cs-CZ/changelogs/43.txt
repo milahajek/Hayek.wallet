@@ -1,0 +1,1 @@
+• Cena utracení mincí: na obrazovce Mince je vidět, kolik stojí každou minci utratit a kolik procent hodnoty sní poplatek. Posuvníkem zjistíte, co by mince stály při vysokých poplatcích; mince, které se nevyplatí utratit, jsou zvýrazněné.

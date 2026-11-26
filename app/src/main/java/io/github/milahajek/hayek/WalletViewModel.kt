@@ -802,11 +802,14 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Sazba zvolená na obrazovce Mince pro výpočet ceny utracení (null = běžný odhad). */
+    var spendRateChoice by mutableStateOf<Long?>(null)
     fun openCoins(from: Screen) = run {
         coinsReturn = from
         screen = Screen.Coins
         val c = core ?: return@run
         coins = lock.withLock { withContext(Dispatchers.IO) { c.coins() } }
+        if (feeEstimates == null) feeEstimates = loadFeeEstimates()
     }
 
     fun toggleSelect(id: String) {

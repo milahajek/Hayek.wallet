@@ -108,6 +108,14 @@ class PromoTest {
         vm.setCoinTag(listOf("${h(6)}:0"), CoinTag.KYC)
         org.junit.Assert.assertEquals("kyc", vm.txGroup(txs[0]))
     }
+    @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
+    @Test fun p21_spend_cost() = shoot("p21_spend_cost") {
+        base(it); tags(it); it.feeEstimates = FeeEstimates(14, 6, 2); it.spendRateChoice = 14
+        it.coins = it.coins + listOf(CoinItem(h(9), 0, 9_000, "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq", true, 925_200, false),
+            CoinItem(h(10), 1, 2_400, "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", true, 925_100, false),
+            CoinItem(h(13), 0, 600, "bc1q9vza2e8x573nczrlzms0wvx3gsqjx7vavgkx0l", true, 925_000, false))
+        it.screen = Screen.Coins
+    }
     @Test fun p18_server_setup() = shoot("p18_server_setup") { it.screen = Screen.ServerSetup }
     @Test fun p4_send() = shoot("p4_send") { base(it); it.feeEstimates = FeeEstimates(14, 6, 2); it.chooseFee(FeeChoice.NORMAL); it.screen = Screen.Send }
 }

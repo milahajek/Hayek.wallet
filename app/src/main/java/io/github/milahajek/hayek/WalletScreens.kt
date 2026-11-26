@@ -398,7 +398,9 @@ fun CoinsScreen(vm: WalletViewModel) {
         }
         if (vm.coins.isEmpty()) Text(L("Žádné mince.", "No coins."), Modifier.padding(16.dp))
         @Suppress("UNUSED_VARIABLE") val tv = vm.tagsVersion
+        val spendRate = vm.spendRate()
         LazyColumn(Modifier.weight(1f)) {
+            item(key = "spend-cost") { SpendCostCard(vm) }
             items(vm.coins, key = { it.id }) { c ->
                 val tag = vm.coinTag(c)
                 ListItem(
@@ -418,6 +420,7 @@ fun CoinsScreen(vm: WalletViewModel) {
                                 (if (c.confirmed) L("Potvrzeno v bloku ${c.height}", "Confirmed in block ${c.height}") else L("Čeká na potvrzení", "Waiting for confirmation")) + (if (c.change) L(" · drobné", " · change") else "") + if (c.frozen) L(" · ZMRAZENO", " · FROZEN") else "",
                                 fontSize = 12.sp, color = if (c.frozen) Color(0xFF3B8ED6) else MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            if (!c.frozen) CoinSpendCost(c.valueSat, spendRate)
                             if (tag != null || vm.isDust(c)) Row(Modifier.padding(top = 4.dp)) {
                                 tag?.let { TagPill(it.key); Spacer(Modifier.width(6.dp)) }
                                 if (vm.isDust(c)) DustPill(c.frozen)
