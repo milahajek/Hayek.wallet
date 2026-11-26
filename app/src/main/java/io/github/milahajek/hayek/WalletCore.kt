@@ -439,7 +439,7 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
     fun prepare(to: String, amountSat: Long, feeRateSatVb: Long, sendAll: Boolean, selected: Set<String> = emptySet(), avoid: Set<String> = emptySet()): PreparedTx {
         // Sledovací peněženka platbu připravit může – podepíše ji hardwarová peněženka (Coldcard).
         val address = try {
-            Address(to.trim(), NETWORK)
+            Address(to.filterNot { it.isWhitespace() }, NETWORK)
         } catch (e: Exception) {
             throw IllegalArgumentException(L("Neplatná bitcoinová adresa", "Invalid bitcoin address"))
         }

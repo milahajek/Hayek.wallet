@@ -173,13 +173,15 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                             })
                         }
                         val wName = if (vm.wallets.size > 1 && vm.isOpen && screen != Screen.Welcome) vm.activeWallet?.let { vm.walletName(it) + " · " } ?: "" else ""
+                        // Veřejný server vidí adresy a zůstatek – proto se odlišuje od vlastního uzlu i barvou.
+                        val public = isPublicServer(vm.serverUrl)
                         val sub = wName + when (vm.connected) {
-                            true -> L("● připojeno k vašemu uzlu", "● connected to your node")
-                            false -> L("● uzel nedostupný", "● node unreachable")
+                            true -> if (public) L("● připojeno k veřejnému serveru", "● connected to a public server") else L("● připojeno k vašemu uzlu", "● connected to your node")
+                            false -> if (public) L("● veřejný server nedostupný", "● public server unreachable") else L("● uzel nedostupný", "● node unreachable")
                             null -> L("Bitcoin mainnet · skutečné peníze", "Bitcoin mainnet · real money")
                         } + if (vm.watchOnly && wName.isEmpty()) L(" · jen sledování", " · watch-only") else ""
                         Text(sub, fontSize = 12.sp, color = when (vm.connected) {
-                            true -> Color(0xFF2E9E4F); false -> MaterialTheme.colorScheme.error; null -> HayekOrange
+                            true -> if (public) HayekOrange else Color(0xFF2E9E4F); false -> MaterialTheme.colorScheme.error; null -> HayekOrange
                         })
                     }
                 },

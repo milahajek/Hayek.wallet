@@ -12,6 +12,11 @@ class QrTest {
 
     @Test fun plainAddress() = assertEquals(PaymentRequest(addr), parsePaymentQr(addr))
 
+    @Test fun addressWithSpaces() {
+        assertEquals(PaymentRequest(addr), parsePaymentQr(addr.chunked(4).joinToString(" ")))
+        assertEquals(PaymentRequest(addr), parsePaymentQr(" " + addr.chunked(4).joinToString("\n") + " "))
+    }
+
     @Test fun uppercaseUri() = assertEquals(PaymentRequest(addr), parsePaymentQr("BITCOIN:" + addr.uppercase()))
 
     @Test fun uriWithAmountAndLabel() = assertEquals(

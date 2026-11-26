@@ -1,0 +1,3 @@
+• Kontrola hodů kostkou: aplikace odmítne hody, které nemohou být náhodné (samé stejné číslo, opakující se vzorec, dlouhá série, nevyvážené rozložení).
+• Na hlavní stránce je vidět, jestli jste připojeni k vlastnímu uzlu, nebo k veřejnému serveru.
+• Adresa vložená s mezerami se sama očistí.

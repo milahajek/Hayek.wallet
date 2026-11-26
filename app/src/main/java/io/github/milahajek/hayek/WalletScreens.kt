@@ -236,7 +236,7 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
             if (vm.coins.any { it.frozen }) L(" (bez zmrazených)", " (excluding frozen)") else "", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(
-            value = to, onValueChange = { to = it.trim().removePrefix("bitcoin:").substringBefore("?"); note = null; vm.prepared = null },
+            value = to, onValueChange = { to = it.filterNot { c -> c.isWhitespace() }.removePrefix("bitcoin:").substringBefore("?"); note = null; vm.prepared = null },
             label = { Text(L("Adresa příjemce", "Recipient address")) }, placeholder = { Text("bc1… / 1… / 3…") }, modifier = Modifier.fillMaxWidth(),
             trailingIcon = {
                 Row {
@@ -245,7 +245,7 @@ fun SendScreen(vm: WalletViewModel, act: FragmentActivity) {
                     IconButton(onClick = {
                         paste(ctx)?.let { raw ->
                             val req = parsePaymentQr(raw)
-                            to = req?.address ?: raw.trim().removePrefix("bitcoin:").substringBefore("?")
+                            to = req?.address ?: raw.filterNot { it.isWhitespace() }.removePrefix("bitcoin:").substringBefore("?")
                             req?.amountSat?.let { amount = it.toString(); all = false }
                             note = null; vm.prepared = null
                         }
@@ -481,3 +481,4 @@ fun ExportScreen(vm: WalletViewModel) {
         }
     }
 }
+

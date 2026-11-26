@@ -86,6 +86,9 @@ class ScreenshotTest {
 
     @Test fun s1_welcome() = shoot("1_uvod") { it.setThemeMode(0); it.finishIntro(Screen.Welcome) }
     @Test fun s2_dice() = shoot("2_kostky") { it.screen = Screen.Dice; it.rolls = "35216614523362154126635214513624436521164352614253366" }
+    @Test fun s2b_dice_bad() = shoot("2b_kostky_vzorec") { it.screen = Screen.Dice; it.rolls = "123456".repeat(9) }
+    @Test fun s4b_home_public() = shoot("4b_penezenka_verejny") { it.setThemeMode(0); it.state = state; it.coins = coins; it.connected = true; it.setServer(PUBLIC_SERVERS.first().second); it.screen = Screen.Home }
+    @Test fun s4c_home_own() = shoot("4c_penezenka_uzel") { it.setThemeMode(0); it.state = state; it.coins = coins; it.connected = true; it.setServer("ssl://192.168.0.10:50002"); it.screen = Screen.Home }
     @Test fun s3_seed() = shoot("3_slova") { it.screen = Screen.ShowSeed(fakeWords) }
     @Test fun s4_home() = shoot("4_penezenka") { it.setThemeMode(0); it.state = state; it.coins = coins; it.connected = true; it.screen = Screen.Home }
     @Test fun s5_receive() = shoot("5_prijmout") { it.state = state; it.connected = true; it.screen = Screen.Receive }

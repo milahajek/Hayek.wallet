@@ -1,0 +1,3 @@
+• Dice roll check: the app rejects rolls that can't be random (same number only, repeating pattern, long run, skewed distribution).
+• The home screen shows whether you're connected to your own node or to a public server.
+• An address pasted with spaces is cleaned up automatically.

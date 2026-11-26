@@ -16,7 +16,8 @@ fun parsePaymentQr(raw: String): PaymentRequest? {
     if (text.isEmpty()) return null
     val hasScheme = text.startsWith("bitcoin:", ignoreCase = true)
     val body = if (hasScheme) text.substring("bitcoin:".length).removePrefix("//") else text
-    val address = body.substringBefore("?").trim()
+    // Mezery uvnitř adresy (zobrazení po čtveřicích v jiných aplikacích) se zahodí.
+    val address = body.substringBefore("?").filterNot { it.isWhitespace() }
     if (!looksLikeAddress(address)) return null
     // Bech32 adresy jsou v QR často velkými písmeny, peněženky je chtějí malými.
     val addr = if (address.startsWith("BC1", ignoreCase = true) || address.startsWith("TB1", ignoreCase = true))

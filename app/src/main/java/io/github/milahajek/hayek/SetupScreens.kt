@@ -155,6 +155,17 @@ fun DiceScreen(vm: WalletViewModel) {
             if (done) L("$count hodů – hotovo (můžete přidat další)", "$count rolls – done (you can add more)") else L("$count / $MIN_ROLLS hodů", "$count / $MIN_ROLLS rolls"),
             fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 6.dp)
         )
+        val diceProblem = remember(vm.rolls) { DiceCheck.problem(vm.rolls) }
+        if (diceProblem != null) {
+            GlassCard(Modifier.fillMaxWidth().padding(bottom = 12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Column(Modifier.padding(12.dp)) {
+                    Text(L("Tyhle hody nevypadají náhodně", "These rolls don't look random"), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
+                    Text(diceProblem, fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                    Text(L("Z takových hodů slova nevytvořím – útočník by je mohl uhodnout. Smažte je a házejte znovu.", "I won't create words from rolls like these – an attacker could guess them. Delete them and roll again."), fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                    TextButton(onClick = { vm.clearRolls() }) { Text(L("Smazat všechny hody", "Delete all rolls")) }
+                }
+            }
+        }
         for (row in listOf(listOf(1, 2, 3), listOf(4, 5, 6))) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { n -> DiceFace(n, { vm.addRoll(n) }, Modifier.weight(1f)) }
@@ -165,7 +176,7 @@ fun DiceScreen(vm: WalletViewModel) {
             GlassButton(onClick = { vm.undoRoll() }, enabled = count > 0, modifier = Modifier.weight(1f)) {
                 Icon(Icons.AutoMirrored.Filled.Backspace, null); Spacer(Modifier.width(6.dp)); Text(L("Smazat poslední", "Delete last"))
             }
-            HayekButton(onClick = { vm.finishDice() }, enabled = done, modifier = Modifier.weight(1f)) { Text(L("Vytvořit slova", "Create words")) }
+            HayekButton(onClick = { vm.finishDice() }, enabled = done && diceProblem == null, modifier = Modifier.weight(1f)) { Text(L("Vytvořit slova", "Create words")) }
         }
         Spacer(Modifier.height(12.dp))
         if (count > 0) {

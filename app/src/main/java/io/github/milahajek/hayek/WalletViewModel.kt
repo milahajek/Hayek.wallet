@@ -647,9 +647,11 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     fun startDice() { rolls = ""; newPassphrase = null; screen = Screen.Dice }
     fun addRoll(n: Int) { rolls += n.toString() }
     fun undoRoll() { rolls = rolls.dropLast(1) }
+    fun clearRolls() { rolls = "" }
 
     fun finishDice() {
         try {
+            DiceCheck.problem(rolls)?.let { throw IllegalArgumentException(it) }
             val words = Seed.fromDice(rolls)
             rolls = ""
             screen = Screen.ShowSeed(words)
