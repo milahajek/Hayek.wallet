@@ -1,0 +1,2 @@
+• Tap the balance to see all transactions, or tap No KYC / KYC to see only that group (sent payments included, based on the coins they spent).
+• The home screen now shows only pending payments and the latest confirmed one.

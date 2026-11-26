@@ -78,8 +78,8 @@ fun TagBalances(vm: WalletViewModel) {
         }
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            BalanceTile(CoinTag.NOKYC, no, vm, Modifier.weight(1f))
-            BalanceTile(CoinTag.KYC, kyc, vm, Modifier.weight(1f))
+            BalanceTile(CoinTag.NOKYC, no, vm, Modifier.weight(1f)) { vm.openHistory(CoinTag.NOKYC.key) }
+            BalanceTile(CoinTag.KYC, kyc, vm, Modifier.weight(1f)) { vm.openHistory(CoinTag.KYC.key) }
         }
         if (none > 0) Row(
             Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(10.dp)).clickable { vm.openCoins(Screen.Home) }.padding(4.dp),
@@ -93,16 +93,16 @@ fun TagBalances(vm: WalletViewModel) {
 }
 
 @Composable
-private fun BalanceTile(tag: CoinTag, sat: Long, vm: WalletViewModel, modifier: Modifier) {
+private fun BalanceTile(tag: CoinTag, sat: Long, vm: WalletViewModel, modifier: Modifier, onClick: () -> Unit) {
     Column(
-        modifier.clip(RoundedCornerShape(16.dp)).background(tag.color.copy(alpha = 0.10f))
+        modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).background(tag.color.copy(alpha = 0.10f))
             .border(1.dp, tag.color.copy(alpha = 0.45f), RoundedCornerShape(16.dp)).padding(vertical = 10.dp, horizontal = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(tag.color))
             Spacer(Modifier.width(6.dp))
-            Text(tag.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = tag.color)
+            Text(tag.label + " ›", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = tag.color)
         }
         Text(vm.amount(sat), fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
     }

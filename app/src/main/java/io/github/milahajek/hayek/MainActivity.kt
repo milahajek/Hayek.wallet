@@ -137,6 +137,7 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
             screen is Screen.Intro -> vm.finishIntro(screen.back)
             screen == Screen.Welcome && vm.adding -> vm.cancelAddWallet()
             screen == Screen.Coins -> vm.screen = vm.coinsReturn
+            screen is Screen.History -> vm.screen = Screen.Home
             screen == Screen.Export || screen == Screen.Seed || screen == Screen.LnSetup -> { vm.revealSeed = false; vm.screen = Screen.Settings }
             screen == Screen.LnPay || screen == Screen.LnReceive -> vm.openLightning()
             screen in inWallet -> { vm.revealSeed = false; vm.screen = if (vm.isOpen) Screen.Home else if (vm.hasWallet) Screen.Locked else Screen.Welcome }
@@ -145,7 +146,7 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
             setup -> vm.screen = Screen.Welcome
         }
     }
-    if (screen in inWallet || setup || screen is Screen.Intro || screen == Screen.ServerSetup || (screen == Screen.Welcome && vm.adding)) BackHandler { back() }
+    if (screen in inWallet || screen is Screen.History || setup || screen is Screen.Intro || screen == Screen.ServerSetup || (screen == Screen.Welcome && vm.adding)) BackHandler { back() }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -186,7 +187,7 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                     }
                 },
                 navigationIcon = {
-                    if (screen in inWallet || setup) IconButton(onClick = { back() }) {
+                    if (screen in inWallet || screen is Screen.History || setup) IconButton(onClick = { back() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, L("Zpět", "Back"))
                     }
                 },
@@ -229,6 +230,7 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                 Screen.LnReceive -> LnReceiveScreen(vm)
                 Screen.LnSetup -> IncognitoKeyboard { LnSetupScreen(vm, act) }
                 Screen.Seed -> SeedScreen(vm, act)
+                is Screen.History -> HistoryScreen(vm, act, s.filter)
             }
             }
             if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))

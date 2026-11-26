@@ -1,0 +1,2 @@
+• Klepnutím na zůstatek otevřete všechny transakce, klepnutím na Bez KYC / KYC jen transakce dané skupiny (i odeslané platby podle mincí, ze kterých šly).
+• Hlavní stránka ukazuje jen čekající a poslední potvrzenou transakci, takže je přehlednější.

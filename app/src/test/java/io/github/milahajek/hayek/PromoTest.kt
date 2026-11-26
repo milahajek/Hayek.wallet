@@ -29,16 +29,16 @@ class PromoTest {
     private fun h(seed: Int) = (0 until 64).map { "0123456789abcdef"[(seed * 7 + it * 13 + it * it * seed) % 16] }.joinToString("")
     private val d = 86_400L
     private val now = 1_795_421_000L
-    private val pendingOut = TxItem(h(1), -152_340, 846, false, null, now - 1_200, feeRate = 6, canBump = true)
+    private val pendingOut = TxItem(h(1), -152_340, 846, false, null, now - 1_200, feeRate = 6, canBump = true, ins = listOf("${h(6)}:0"))
     private val txs = listOf(
         pendingOut,
-        TxItem(h(2), 1_000_000, 0, true, 925_890, now - d),
-        TxItem(h(3), -86_500, 420, true, 925_610, now - 3 * d),
-        TxItem(h(4), 250_000, 0, true, 925_330, now - 5 * d),
-        TxItem(h(5), -502_100, 2_100, true, 924_980, now - 8 * d),
-        TxItem(h(6), 75_000, 0, true, 924_600, now - 11 * d),
-        TxItem(h(7), -33_210, 282, true, 924_120, now - 15 * d),
-        TxItem(h(8), 2_400_000, 0, true, 923_700, now - 19 * d),
+        TxItem(h(2), 1_000_000, 0, true, 925_890, now - d, outs = listOf(OwnOut(h(2), 0, "bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g", false))),
+        TxItem(h(3), -86_500, 420, true, 925_610, now - 3 * d, ins = listOf("${h(8)}:0")),
+        TxItem(h(4), 250_000, 0, true, 925_330, now - 5 * d, outs = listOf(OwnOut(h(4), 1, "bc1qp59yckz4ae5c4efgw2s5wfyvrz0ala7rgvuz8z", false))),
+        TxItem(h(5), -502_100, 2_100, true, 924_980, now - 8 * d, ins = listOf("${h(2)}:0")),
+        TxItem(h(6), 75_000, 0, true, 924_600, now - 11 * d, outs = listOf(OwnOut(h(6), 0, "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", false))),
+        TxItem(h(7), -33_210, 282, true, 924_120, now - 15 * d, ins = listOf("${h(4)}:1")),
+        TxItem(h(8), 2_400_000, 0, true, 923_700, now - 19 * d, outs = listOf(OwnOut(h(8), 0, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", false))),
     )
     private val state = WalletState(2_951_195 - 152_340 - 846, 0, 2_797_009, "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu", txs)
 
@@ -95,6 +95,19 @@ class PromoTest {
     @Test fun p14_new_seed() = shoot("p14_new_seed") { base(it); it.screen = Screen.ShowSeed("abandon ".repeat(23) + "art") }
     @Test fun p15_restore() = shoot("p15_restore") { base(it); it.screen = Screen.Restore }
     @Test fun p16_verify() = shoot("p16_verify") { base(it); it.screen = Screen.Verify("abandon ".repeat(23) + "art") }
+    @Config(qualifiers = "w411dp-h1400dp-xxhdpi")
+    @Test fun p19_history_nokyc() = shoot("p19_history_nokyc") { base(it); tags(it); it.screen = Screen.History(CoinTag.NOKYC.key) }
+    @Test fun p20_history_all() = shoot("p20_history_all") { base(it); tags(it); it.screen = Screen.History(null) }
+    @Test fun txGroups() {
+        val vm = WalletViewModel(org.robolectric.RuntimeEnvironment.getApplication()); base(vm); tags(vm)
+        val g = txs.associate { it.txid to vm.txGroup(it) }
+        org.junit.Assert.assertEquals("kyc", g[h(2)]); org.junit.Assert.assertEquals("kyc", g[h(5)])
+        org.junit.Assert.assertEquals("nokyc", g[h(4)]); org.junit.Assert.assertEquals("nokyc", g[h(7)]); org.junit.Assert.assertEquals("nokyc", g[h(3)])
+        org.junit.Assert.assertEquals("none", g[h(6)]); org.junit.Assert.assertEquals("none", g[h(1)])
+        org.junit.Assert.assertEquals(listOf(h(3), h(4), h(7), h(8)), txs.filter { vm.txMatches(it, "nokyc") }.map { it.txid })
+        vm.setCoinTag(listOf("${h(6)}:0"), CoinTag.KYC)
+        org.junit.Assert.assertEquals("kyc", vm.txGroup(txs[0]))
+    }
     @Test fun p18_server_setup() = shoot("p18_server_setup") { it.screen = Screen.ServerSetup }
     @Test fun p4_send() = shoot("p4_send") { base(it); it.feeEstimates = FeeEstimates(14, 6, 2); it.chooseFee(FeeChoice.NORMAL); it.screen = Screen.Send }
 }

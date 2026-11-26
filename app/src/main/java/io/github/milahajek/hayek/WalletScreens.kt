@@ -7,6 +7,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -54,10 +56,14 @@ fun HomeScreen(vm: WalletViewModel, act: FragmentActivity) {
         if (vm.wallets.size > 1) { WalletSwitcher(vm); Spacer(Modifier.height(10.dp)) }
         GlassCard(Modifier.fillMaxWidth()) {
             Box(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(20.dp).fillMaxWidth().clickable { vm.toggleHideBalance() }, horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(L("Zůstatek", "Balance"), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(vm.amount(st?.totalSat ?: 0), fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                    Text(if (vm.hideBalance) L("klepnutím zobrazíte", "tap to show") else formatBtc(st?.totalSat ?: 0), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(Modifier.padding(20.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    // Klepnutí na zůstatek otevře všechny transakce (skrytí částek je na ikoně oka).
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { vm.openHistory(null) }, horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(L("Zůstatek", "Balance"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(vm.amount(st?.totalSat ?: 0), fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                        Text(if (vm.hideBalance) L("skryto", "hidden") else formatBtc(st?.totalSat ?: 0), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(L("Všechny transakce ›", "All transactions ›"), fontSize = 12.sp, color = HayekOrange)
+                    }
                     val pending = st?.pendingSat ?: 0
                     if (pending > 0 && !vm.hideBalance) {
                         Text(L("z toho čeká na potvrzení: ${formatSat(pending)}", "of which unconfirmed: ${formatSat(pending)}"), color = HayekOrange, fontSize = 13.sp)
@@ -88,11 +94,18 @@ fun HomeScreen(vm: WalletViewModel, act: FragmentActivity) {
             Text(L("Mince (UTXO): ${vm.coins.size}", "Coins (UTXO): ${vm.coins.size}") + if (vm.coins.any { it.frozen }) L(" · zmrazené: ${vm.coins.count { it.frozen }}", " · frozen: ${vm.coins.count { it.frozen }}") else "")
         }
         if (vm.lnConfig != null) { Spacer(Modifier.height(8.dp)); LightningHomeCard(vm) }
-        Text(L("Transakce", "Transactions"), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
+        Text(L("Poslední transakce", "Latest transactions"), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
         val txs = st?.txs.orEmpty()
         if (txs.isEmpty()) Text(if (vm.busy) L("Načítám z vašeho uzlu…", "Loading from your node…") else L("Zatím žádné transakce.", "No transactions yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Na hlavní stránce jen čekající platby a poslední potvrzená; celá historie je za zůstatkem.
+        val recent = txs.filter { !it.confirmed } + txs.filter { it.confirmed }.take(1)
         LazyColumn(Modifier.fillMaxSize()) {
-            items(txs, key = { it.txid }) { tx -> TxRow(tx, vm) { vm.openTxDetail(tx) } }
+            items(recent, key = { it.txid }) { tx -> TxRow(tx, vm) { vm.openTxDetail(tx) } }
+            if (txs.size > recent.size) item {
+                TextButton(onClick = { vm.openHistory(null) }, Modifier.fillMaxWidth()) {
+                    Text(L("Všechny transakce (${txs.size}) ›", "All transactions (${txs.size}) ›"))
+                }
+            }
         }
     }
     vm.txDetail?.let { TxDetailDialog(it, vm, act) }
@@ -482,3 +495,40 @@ fun ExportScreen(vm: WalletViewModel) {
     }
 }
 
+/** Celá historie transakcí s filtrem podle značky (KYC / bez KYC / neoznačené). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun HistoryScreen(vm: WalletViewModel, act: FragmentActivity, filter: String?) {
+    @Suppress("UNUSED_VARIABLE") val v = vm.tagsVersion
+    val all = vm.state?.txs.orEmpty()
+    val groups = remember(all, v) { all.map { vm.txGroup(it) }.toSet() }
+    val shown = remember(all, filter, v) { all.filter { vm.txMatches(it, filter) } }
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Spacer(Modifier.height(8.dp))
+        Text(L("Transakce", "Transactions"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        WalletBadge(vm)
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = filter == null, onClick = { vm.openHistory(null) }, label = { Text(L("Vše", "All")) })
+            listOf(CoinTag.NOKYC.key, CoinTag.KYC.key, CoinTag.NONE)
+                .filter { k -> k == filter || k in groups || (k != CoinTag.NONE && TX_MIXED in groups) }
+                .forEach { k -> TagPill(k, selected = filter == k) { vm.openHistory(if (filter == k) null else k) } }
+        }
+        Text(
+            when (shown.size) { 1 -> L("1 transakce", "1 transaction"); in 2..4 -> L("${shown.size} transakce", "${shown.size} transactions"); else -> L("${shown.size} transakcí", "${shown.size} transactions") } +
+                if (filter != null && !vm.hideBalance) {
+                    val sum = shown.sumOf { it.deltaSat }
+                    L(" · celkem ${vm.amount(sum, sign = true)}", " · total ${vm.amount(sum, sign = true)}")
+                } else "",
+            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+        )
+        if (filter != null && TX_MIXED in groups && filter != CoinTag.NONE)
+            Text(L("Platby, které použily mince s různými značkami, jsou v obou skupinách.", "Payments that used coins with different tags appear in both groups."),
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (shown.isEmpty()) Text(L("Žádné transakce.", "No transactions."), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp))
+        LazyColumn(Modifier.fillMaxSize()) {
+            items(shown, key = { it.txid }) { tx -> TxRow(tx, vm) { vm.openTxDetail(tx) } }
+        }
+    }
+    vm.txDetail?.let { TxDetailDialog(it, vm, act) }
+}

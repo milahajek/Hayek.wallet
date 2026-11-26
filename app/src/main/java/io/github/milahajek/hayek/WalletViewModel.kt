@@ -36,12 +36,15 @@ sealed interface Screen {
     data object Send : Screen
     data object Settings : Screen
     data object Seed : Screen
+    /** Všechny transakce; [filter] = klíč značky (CoinTag / „none“), null = bez filtru. */
+    data class History(val filter: String? = null) : Screen
     data object Lightning : Screen
     data object LnPay : Screen
     data object LnReceive : Screen
     data object LnSetup : Screen
 }
 
+const val TX_MIXED = "mixed"
 const val LND_KEY = "lnd"
 fun encodeLndSecret(c: LndConfig) = c.hostPort + "|" + c.macaroonHex
 fun decodeLndSecret(s: String) = LndConfig(s.substringBefore("|"), s.substringAfter("|"))
@@ -254,6 +257,30 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     /** Skupiny nezmrazených mincí: klíč → součet. */
     fun spendableGroups(): Map<String, Long> =
         coins.filter { !it.frozen }.groupBy { coinTagKey(it) }.mapValues { (_, v) -> v.sumOf { it.valueSat } }
+    /**
+     * Do které skupiny transakce patří: klíč CoinTag, [CoinTag.NONE], nebo [TX_MIXED].
+     * Odeslaná platba podle utracených mincí (nebo uložené značky „t:“), přijatá podle vlastních výstupů.
+     * Funguje i u mincí, které už jsou utracené (značky zůstávají uložené u txid:vout a adres).
+     */
+    fun txGroup(tx: TxItem): String {
+        tagsVersion
+        tagRaw("t:${tx.txid}")?.let { return it }
+        val index = ownOutIndex()
+        val src = if (tx.deltaSat < 0 && tx.ins.isNotEmpty()) tx.ins.mapNotNull { index[it] } else tx.outs
+        val tags = src.map { CoinTag.keyOf(resolveTag(it.asCoin(), ::tagRaw)) }.distinct().filter { it != CoinTag.NONE }
+        return when (tags.size) { 0 -> CoinTag.NONE; 1 -> tags[0]; else -> TX_MIXED }
+    }
+    /** Patří transakce do filtru (null = všechny)? Smíšená transakce patří do obou značek. */
+    fun txMatches(tx: TxItem, filter: String?): Boolean = filter == null || txGroup(tx).let { it == filter || (it == TX_MIXED && filter != CoinTag.NONE) }
+    private var outIndexState: WalletState? = null
+    private var outIndex: Map<String, OwnOut> = emptyMap()
+    private fun ownOutIndex(): Map<String, OwnOut> {
+        val st = state
+        if (st !== outIndexState) { outIndex = st?.txs.orEmpty().flatMap { it.outs }.associateBy { it.id }; outIndexState = st }
+        return outIndex
+    }
+    fun openHistory(filter: String?) { screen = Screen.History(filter) }
+
     fun inputTags(p: PreparedTx): List<CoinTag?> = p.inputIds.map { id -> coins.find { it.id == id }?.let { coinTag(it) } }
 
     // ---------- Upozornění na příchozí platby (na pozadí) ----------

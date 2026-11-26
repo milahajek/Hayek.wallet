@@ -67,7 +67,17 @@ data class TxItem(
     val feeRate: Long? = null,
     /** Odeslaná nepotvrzená transakce s RBF – jde urychlit vyšším poplatkem. */
     val canBump: Boolean = false,
+    /** Vlastní výstupy transakce (i už utracené) – z jejich značek se pozná, kam transakce patří (KYC / bez KYC). */
+    val outs: List<OwnOut> = emptyList(),
+    /** Vlastní mince, které transakce utratila (txid:vout). */
+    val ins: List<String> = emptyList(),
 )
+
+/** Vlastní výstup transakce: stačí k dohledání značky mince, i když je už utracená. */
+data class OwnOut(val txid: String, val vout: Int, val address: String, val change: Boolean) {
+    val id get() = "$txid:$vout"
+    fun asCoin() = CoinItem(txid, vout, 0, address, confirmed = true, height = null, frozen = false, change = change)
+}
 
 /** Doporučené poplatky v sat/vB. */
 data class FeeEstimates(val fast: Long, val normal: Long, val slow: Long) {
@@ -384,21 +394,31 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
         val b = wallet.balance()
         val addr = wallet.nextUnusedAddress(KeychainKind.EXTERNAL).address.toString()
         wallet.persist(persister)
+        val own = wallet.listOutput().map { o ->
+            OwnOut(o.outpoint.txid.toString(), o.outpoint.vout.toInt(),
+                try { Address.fromScript(o.txout.scriptPubkey, NETWORK).toString() } catch (e: Exception) { "?" },
+                o.keychain == KeychainKind.INTERNAL)
+        }
+        val outsByTx = own.groupBy { it.txid }
+        val ownIds = own.mapTo(HashSet()) { it.id }
         val txs = wallet.transactions().mapNotNull { ctx ->
             val txid = ctx.transaction.computeTxid()
             val d = wallet.txDetails(txid) ?: return@mapNotNull null
+            val outs = outsByTx[txid.toString()].orEmpty()
+            val ins = ctx.transaction.input().map { "${it.previousOutput.txid}:${it.previousOutput.vout}" }.filter { it in ownIds }
             when (val pos = ctx.chainPosition) {
                 is ChainPosition.Confirmed -> TxItem(
                     txid.toString(), d.balanceDelta, d.fee?.toSat()?.toLong(), true,
                     pos.confirmationBlockTime.blockId.height.toInt(),
                     pos.confirmationBlockTime.confirmationTime.toLong(),
-                    feeRate = d.feeRate?.toSatPerVbCeil()?.toLong(),
+                    feeRate = d.feeRate?.toSatPerVbCeil()?.toLong(), outs = outs, ins = ins,
                 )
                 is ChainPosition.Unconfirmed -> TxItem(
                     txid.toString(), d.balanceDelta, d.fee?.toSat()?.toLong(), false,
                     null, pos.timestamp?.toLong(),
                     feeRate = d.feeRate?.toSatPerVbCeil()?.toLong(),
                     canBump = !watchOnly && d.balanceDelta < 0 && d.fee != null && ctx.transaction.isExplicitlyRbf(),
+                    outs = outs, ins = ins,
                 )
             }
         }.sortedWith(compareBy<TxItem> { it.confirmed }.thenByDescending { it.height ?: 0 })
