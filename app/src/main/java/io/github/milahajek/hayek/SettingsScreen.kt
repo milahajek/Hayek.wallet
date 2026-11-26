@@ -241,6 +241,9 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
         TextButton(onClick = { openUrl(ctx, PRIVACY_URL) }, Modifier.align(Alignment.CenterHorizontally)) {
             Icon(Icons.AutoMirrored.Filled.OpenInNew, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(L("Zásady ochrany soukromí", "Privacy policy"))
         }
+        // Verze a původ instalace – hodí se při hlášení chyb.
+        Text("Hayek Wallet ${BuildConfig.VERSION_NAME} · " + if (BuildConfig.PLAY) "Google Play" else "GitHub",
+            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.CenterHorizontally))
         Spacer(Modifier.height(24.dp))
     }
     if (confirmDelete) {
