@@ -72,7 +72,7 @@ fun TagBalances(vm: WalletViewModel) {
     Column(Modifier.fillMaxWidth().padding(top = 14.dp)) {
         // Poměr skupin ukazují samotné dlaždice; samostatný pruh byl navíc.
         @Suppress("UNUSED_VARIABLE") val t = total
-        Row(Modifier.fillMaxWidth().height(HOME_TILE_HEIGHT), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth().height(homeTileHeight()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             BalanceTile(CoinTag.NOKYC, no, vm, Modifier.weight(1f).fillMaxHeight()) { vm.openHistory(CoinTag.NOKYC.key) }
             BalanceTile(CoinTag.KYC, kyc, vm, Modifier.weight(1f).fillMaxHeight()) { vm.openHistory(CoinTag.KYC.key) }
         }

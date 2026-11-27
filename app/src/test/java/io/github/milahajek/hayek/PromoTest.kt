@@ -132,6 +132,10 @@ class PromoTest {
             CoinItem(h(13), 0, 9_000, "bc1q9vza2e8x573nczrlzms0wvx3gsqjx7vavgkx0l", false, null, false))
         it.screen = Screen.Home
     }
+    @Config(qualifiers = "w384dp-h832dp-xxhdpi", fontScale = 1.3f)
+    @Test fun p24_home_bigfont() = shoot("p24_home_bigfont") {
+        base(it); tags(it); it.setThemeMode(2); it.feeEstimates = FeeEstimates(12, 6, 2); it.screen = Screen.Home
+    }
     @Test fun p18_server_setup() = shoot("p18_server_setup") { it.screen = Screen.ServerSetup }
     @Test fun p4_send() = shoot("p4_send") { base(it); it.feeEstimates = FeeEstimates(14, 6, 2); it.chooseFee(FeeChoice.NORMAL); it.screen = Screen.Send }
 }

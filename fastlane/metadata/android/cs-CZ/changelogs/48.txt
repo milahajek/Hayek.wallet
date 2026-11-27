@@ -1,0 +1,1 @@
+• Oprava: na dlaždici Mince se při větším písmu v systému ořezával spodní řádek.
