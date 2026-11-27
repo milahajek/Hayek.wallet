@@ -182,6 +182,8 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
             HorizontalDivider(Modifier.padding(vertical = 20.dp))
             DustSection(vm)
             HorizontalDivider(Modifier.padding(vertical = 20.dp))
+            MinersSection(vm)
+            HorizontalDivider(Modifier.padding(vertical = 20.dp))
             Text(L("Bezpečnost", "Security"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             vm.keyLevel?.let { lvl ->
@@ -258,5 +260,46 @@ fun SettingsScreen(vm: WalletViewModel, act: FragmentActivity) {
             confirmButton = { TextButton(onClick = { confirmDelete = false; act.auth(vm, L("Smazat peněženku", "Delete wallet"), strong = true) { vm.deleteWallet() } }) { Text(L("Smazat", "Delete")) } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(L("Zrušit", "Cancel")) } }
         )
+    }
+}
+
+/** Těžaři v domácí síti: přidat / odebrat adresu. Výkon se pak ukazuje ve Stavu sítě a na widgetu. */
+@Composable
+private fun MinersSection(vm: WalletViewModel) {
+    Text(L("Těžaři", "Miners"), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+    Text(L("Bitaxe, NerdAxe, NerdQAxe nebo Avalon v domácí síti. Zadejte jejich IP adresu (v routeru jim nastavte pevnou). Hayek z nich jen čte výkon a teplotu, nic nemění a nic neposílá do internetu.",
+        "Bitaxe, NerdAxe, NerdQAxe or Avalon on your home network. Enter their IP address (give them a fixed one in your router). Hayek only reads hashrate and temperature, changes nothing and sends nothing to the internet."),
+        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(Modifier.height(8.dp))
+    vm.minerHosts.forEach { h ->
+        val m = vm.miners?.firstOrNull { it.host == h }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(m?.name?.takeIf { it.isNotBlank() && it != h } ?: h, fontWeight = FontWeight.Medium)
+                Text(when {
+                    m == null -> h
+                    !m.online -> L("$h · nedostupný", "$h · unreachable")
+                    else -> "$h · " + MinerMath.rate(m.hashrateGh)
+                }, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            IconButton(onClick = { vm.removeMiner(h) }) { Icon(Icons.Default.Delete, L("Odebrat", "Remove")) }
+        }
+    }
+    var input by remember { mutableStateOf("") }
+    var err by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = input, onValueChange = { input = it.filter { c -> c.isDigit() || c == '.' || c == ':' }; err = false },
+            label = { Text(L("IP adresa těžaře", "Miner IP address")) }, placeholder = { Text("192.168.1.50") },
+            singleLine = true, isError = err, modifier = Modifier.weight(1f),
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri),
+        )
+        Spacer(Modifier.width(8.dp))
+        GlassButton(onClick = { if (vm.addMiner(input)) input = "" else err = true }) { Text(L("Přidat", "Add")) }
+    }
+    if (err) Text(L("Zadejte adresu z domácí sítě, např. 192.168.1.50 (10.x, 172.16–31.x nebo 192.168.x).", "Enter a home-network address, e.g. 192.168.1.50 (10.x, 172.16–31.x or 192.168.x)."),
+        fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+    if (vm.minerHosts.isNotEmpty()) TextButton(onClick = { vm.refreshMiners() }) {
+        Text(if (vm.minersLoading) L("Ptám se těžařů…", "Asking miners…") else L("Načíst stav těžařů", "Check miners"))
     }
 }

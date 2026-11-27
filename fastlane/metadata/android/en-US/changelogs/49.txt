@@ -1,0 +1,2 @@
+• My mining: add your home miners (Bitaxe, NerdAxe, NerdQAxe, Avalon) in Settings and see their hashrate, temperature, power, odds of finding a block and best share in Network status. The widget shows total hashrate.
+• Hayek only reads from the miners, never sends them anything, and only talks to your home network.

@@ -293,8 +293,39 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         screen = Screen.Network
         refreshNetwork()
     }
+    // ---- Domácí těžaři (jen čtení, jen domácí síť) ----
+    var minerHosts by mutableStateOf(MinerStore.hosts(getApplication()))
+    var miners by mutableStateOf<List<MinerStats>?>(null)
+    var minersLoading by mutableStateOf(false)
+    fun addMiner(input: String): Boolean {
+        val h = input.trim()
+        if (!MinerMath.isLanHost(h)) return false
+        minerHosts = (minerHosts + h).distinct()
+        MinerStore.setHosts(getApplication(), minerHosts)
+        refreshMiners()
+        return true
+    }
+    fun removeMiner(host: String) {
+        minerHosts = minerHosts - host
+        MinerStore.setHosts(getApplication(), minerHosts)
+        miners = miners?.filter { it.host != host }
+        refreshMiners()
+    }
+    fun refreshMiners() {
+        if (minersLoading) return
+        if (minerHosts.isEmpty()) { miners = null; viewModelScope.launch { MinerStore.refresh(getApplication()); HayekWidget.updateAll(getApplication()) }; return }
+        minersLoading = true
+        viewModelScope.launch {
+            try {
+                miners = MinerStore.refresh(getApplication())
+                HayekWidget.updateAll(getApplication())
+            } finally { minersLoading = false }
+        }
+    }
+
     /** Načte statistiky ze serveru. Neblokuje ostatní práci (nenastavuje busy), jen sdílí zámek spojení. */
     fun refreshNetwork() {
+        refreshMiners()
         val c = core ?: return
         if (netLoading) return
         netLoading = true

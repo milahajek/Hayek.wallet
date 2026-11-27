@@ -96,6 +96,7 @@ fun NetworkScreen(vm: WalletViewModel) {
         ConnectionCard(vm, s, public)
         BlocksCard(s, now)
         MiningCard(s)
+        MyMiningCard(vm, s)
         RetargetCard(s, now)
         HalvingCard(s, now)
         SupplyCard(s)
@@ -282,4 +283,82 @@ private fun FeesCard(s: NetworkStats) {
         Text(L("Částka „≈“ je cena běžné platby (1 vstup, 2 výstupy, 141 vB).", "The „≈“ amount is the cost of a typical payment (1 input, 2 outputs, 141 vB)."),
             fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+/** Moje těžba: domácí těžaři z Nastavení, šance na blok a nejlepší podíl vůči obtížnosti sítě. */
+@Composable
+private fun MyMiningCard(vm: WalletViewModel, s: NetworkStats) {
+    val hosts = vm.minerHosts
+    StatCard(L("Moje těžba", "My mining")) {
+        if (hosts.isEmpty()) {
+            Text(L("Máte doma těžaře (Bitaxe, NerdAxe, NerdQAxe, Avalon)? Přidejte je v Nastavení → Těžaři a uvidíte tady jejich výkon a šanci na blok.",
+                "Mining at home (Bitaxe, NerdAxe, NerdQAxe, Avalon)? Add your miners in Settings → Miners to see their hashrate and your odds of a block."),
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = { vm.screen = Screen.Settings }) { Text(L("Přidat těžaře ›", "Add miners ›")) }
+            return@StatCard
+        }
+        val list = vm.miners
+        if (list == null) {
+            Text(if (vm.minersLoading) L("Ptám se těžařů…", "Asking your miners…") else "—", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            return@StatCard
+        }
+        val on = list.filter { it.online }
+        val total = on.sumOf { it.hashrateGh }
+        val diff = ChainMath.difficulty(s.bits)
+        Row(verticalAlignment = Alignment.Bottom) {
+            Big(MinerMath.rate(total))
+            Spacer(Modifier.width(8.dp))
+            Text(L("${on.size} z ${list.size} těží", "${on.size} of ${list.size} mining"), fontSize = 12.sp,
+                color = if (on.size == list.size) Green else HayekOrange, modifier = Modifier.padding(bottom = 6.dp))
+        }
+        on.sumOf { it.powerW ?: 0.0 }.takeIf { it > 0 }?.let { w ->
+            InfoRow(L("Příkon celkem", "Total power"), NetFmt.dec(w, 0) + " W" + if (total > 0) " · " + NetFmt.dec(w / (total / 1000), 1) + " J/TH" else "")
+        }
+        // Jednotliví těžaři.
+        Spacer(Modifier.height(6.dp))
+        list.forEach { m ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).clip(CircleShape).background(if (m.online && m.hashrateGh > 0) Green else if (m.online) HayekOrange else MaterialTheme.colorScheme.error))
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(m.name.ifBlank { m.host }, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+                    Text(
+                        if (!m.online) L("nedostupný", "unreachable")
+                        else listOfNotNull(m.model.takeIf { it.isNotBlank() }, m.tempC?.let { NetFmt.dec(it, 0) + " °C" }, m.powerW?.let { NetFmt.dec(it, 0) + " W" }).joinToString(" · "),
+                        fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1
+                    )
+                }
+                Text(if (m.online) MinerMath.rate(m.hashrateGh) else "—", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (total > 0 && diff > 0) {
+            val perDay = MinerMath.blocksPerDay(total, diff)
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            Text(L("Šance najít blok", "Odds of finding a block"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            InfoRow(L("Za den", "Per day"), "1 : " + NetFmt.num((1 / perDay).roundToLong()))
+            InfoRow(L("Za rok", "Per year"), NetFmt.dec(MinerMath.chance(perDay, 365.0) * 100, 3) + L(" %", "%"))
+            InfoRow(L("Průměrně jednou za", "On average once every"), (1 / perDay / 365).let { y -> if (y >= 10) NetFmt.num(y.roundToLong()) else NetFmt.dec(y, 1) } + L(" let", " years"))
+            Text(L("Pokud blok najdete, celá odměna (${NetFmt.btc(ChainMath.subsidy(s.tipHeight), 3)} + poplatky) je vaše.",
+                "If you find a block, the whole reward (${NetFmt.btc(ChainMath.subsidy(s.tipHeight), 3)} + fees) is yours."),
+                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        val best = list.maxOfOrNull { it.bestDiff } ?: 0.0
+        if (best > 0 && diff > 0) {
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            Text(L("Nejlepší podíl", "Best share"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Big(MinerMath.diff(best))
+            val frac = (best / diff)
+            Progress(kotlin.math.sqrt(frac.coerceIn(0.0, 1.0)).toFloat(), HayekOrange,
+                L("Na blok je potřeba ${MinerMath.diff(diff)} · máte ${fracText(frac)} cesty", "A block needs ${MinerMath.diff(diff)} · you are ${fracText(frac)} of the way"))
+        }
+        Text(L("Údaje čte Hayek přímo z těžařů v domácí síti. Nic jim neposílá a nic nemění.",
+            "Hayek reads this directly from the miners on your home network. It never sends them anything or changes anything."),
+            fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+    }
+}
+
+private fun fracText(f: Double): String = when {
+    f >= 0.01 -> NetFmt.dec(f * 100, 1) + L(" %", "%")
+    f >= 1e-6 -> NetFmt.dec(f * 100, 4) + L(" %", "%")
+    else -> "1 : " + NetFmt.num((1 / f).roundToLong())
 }

@@ -182,6 +182,7 @@ class NetworkWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
             try { readNetworkStats(c) } finally { runCatching { c.close() } }
         }.onSuccess { NetworkCache.save(ctx, it, isPublicServer(server)) }
             .onFailure { NetworkCache.failed(ctx) }
+        runCatching { MinerStore.refresh(ctx) }
         HayekWidget.updateAll(ctx)
         return Result.success()
     }

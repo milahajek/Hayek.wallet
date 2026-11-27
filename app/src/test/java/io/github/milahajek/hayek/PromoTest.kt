@@ -122,6 +122,11 @@ class PromoTest {
         val t = System.currentTimeMillis() / 1000 - 4 * 60
         it.netStats = NetworkStats(System.currentTimeMillis() - 20_000, "Fulcrum 1.12.0", "1.4", null, 38, 925_917,
             listOf(t, t - 380, t - 1_460, t - 1_700, t - 2_950, t - 3_320, t - 4_100), t - 144 * 590, t - 573 * 588, 0x1701E060, 12, 6, 2, 1.0)
+        it.minerHosts = listOf("10.0.0.21", "10.0.0.22", "10.0.0.23")
+        it.miners = listOf(
+            MinerStats("10.0.0.21", true, "NerdQAxe++", "NerdQAxe++", 4870.0, 62.0, 76.0, 5120, 2, 2.4e9),
+            MinerStats("10.0.0.22", true, "Octaxe", "NerdOctaxe", 9650.0, 64.0, 158.0, 9844, 4, 8.7e9),
+            MinerStats("10.0.0.23", false))
         it.screen = Screen.Network
     }
     @Config(qualifiers = "w384dp-h832dp-xxhdpi")

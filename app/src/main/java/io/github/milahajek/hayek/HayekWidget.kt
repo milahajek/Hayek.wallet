@@ -57,7 +57,8 @@ class HayekWidget : GlanceAppWidget() {
         val stats = NetworkCache.load(context)
         val kind = NetworkCache.kind(context)
         val ok = NetworkCache.lastAttemptOk(context)
-        provideContent { WidgetBody(stats, kind, ok, System.currentTimeMillis()) }
+        val miners = MinerStore.summary(context)
+        provideContent { WidgetBody(stats, kind, ok, System.currentTimeMillis(), miners) }
     }
 }
 
@@ -93,7 +94,7 @@ private fun T(text: String, size: TextUnit = 12.sp, color: Color = WHITE, bold: 
     Text(text, modifier, TextStyle(color = ColorProvider(color), fontSize = size, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal), maxLines = 1)
 
 @Composable
-fun WidgetBody(s: NetworkStats?, kind: String?, ok: Boolean, now: Long) {
+fun WidgetBody(s: NetworkStats?, kind: String?, ok: Boolean, now: Long, miners: MinerStore.Summary? = null) {
     val size = LocalSize.current
     val dot = when { !ok -> RED; kind == "public" -> ORANGE; else -> GREEN }
     Box(GlanceModifier.fillMaxSize().background(BG).cornerRadius(22.dp).clickable(actionStartActivity<MainActivity>()).padding(12.dp)) {
@@ -116,6 +117,10 @@ fun WidgetBody(s: NetworkStats?, kind: String?, ok: Boolean, now: Long) {
                     T("⟳", 17.sp, GREY, true, GlanceModifier.padding(start = 8.dp).clickable(actionRunCallback<WidgetRefresh>()))
             }
             T(L("blok ", "block ") + NetFmt.ago((now / 1000 - s.tipTime).coerceAtLeast(0)), 11.sp, GREY)
+            // Domácí těžaři (jen souhrnný výkon, nic o peněžence).
+            if (miners != null && miners.total > 0)
+                T("⛏ " + MinerMath.rate(miners.totalGh) + "  ·  " + "${miners.online}/${miners.total}", 12.sp,
+                    if (miners.online == miners.total) GREEN else ORANGE, true, GlanceModifier.padding(top = 2.dp))
             if (size.height >= HayekWidget.MEDIUM.height && size.width >= HayekWidget.MEDIUM.width) {
                 Spacer(GlanceModifier.height(8.dp))
                 Row(GlanceModifier.fillMaxWidth()) {

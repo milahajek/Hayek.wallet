@@ -1,0 +1,2 @@
+• Moje těžba: přidejte své domácí těžaře (Bitaxe, NerdAxe, NerdQAxe, Avalon) v Nastavení a ve Stavu sítě uvidíte jejich výkon, teplotu, příkon, šanci na nalezení bloku a nejlepší podíl. Widget ukazuje celkový výkon.
+• Hayek z těžařů jen čte, nic jim neposílá a ptá se jen v domácí síti.
