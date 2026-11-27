@@ -125,7 +125,13 @@ class PromoTest {
         it.screen = Screen.Network
     }
     @Config(qualifiers = "w384dp-h832dp-xxhdpi")
-    @Test fun p23_home_phone() = shoot("p23_home_phone") { base(it); tags(it); it.setThemeMode(2); it.screen = Screen.Home }
+    @Test fun p23_home_phone() = shoot("p23_home_phone") {
+        base(it); tags(it); it.setThemeMode(2); it.feeEstimates = FeeEstimates(12, 6, 2)
+        it.coins = it.coins + listOf(CoinItem(h(9), 0, 42_000, "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq", true, 925_200, false),
+            CoinItem(h(10), 1, 18_500, "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh", true, 925_100, true),
+            CoinItem(h(13), 0, 9_000, "bc1q9vza2e8x573nczrlzms0wvx3gsqjx7vavgkx0l", false, null, false))
+        it.screen = Screen.Home
+    }
     @Test fun p18_server_setup() = shoot("p18_server_setup") { it.screen = Screen.ServerSetup }
     @Test fun p4_send() = shoot("p4_send") { base(it); it.feeEstimates = FeeEstimates(14, 6, 2); it.chooseFee(FeeChoice.NORMAL); it.screen = Screen.Send }
 }

@@ -820,7 +820,7 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun sync() = run { try { syncNow() } finally { syncOthersQuietly() } }
+    fun sync() = run { try { syncNow(); if (feeEstimates == null) feeEstimates = loadFeeEstimates() } finally { syncOthersQuietly() } }
 
     fun newAddress() = run {
         val c = core ?: return@run

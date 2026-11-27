@@ -1,0 +1,2 @@
+• No KYC, KYC, Coins and Lightning tiles and the Receive and Send buttons are raised and physically "press in" when tapped (with a light vibration).
+• The Coins tile shows a coloured dot for each coin and the cost of spending them.

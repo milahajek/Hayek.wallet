@@ -97,22 +97,17 @@ fun HomeScreen(vm: WalletViewModel, act: FragmentActivity) {
                 }
                 // Mince a Lightning vedle sebe – uvolní místo pro transakce.
                 item {
-                    Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        HomeTile(
-                            icon = { Icon(Icons.Default.Toll, null, tint = HayekOrange) },
-                            title = L("Mince", "Coins"),
-                            value = "${vm.coins.size}" + if (vm.coins.any { it.frozen }) L(" · ❄ ${vm.coins.count { it.frozen }}", " · ❄ ${vm.coins.count { it.frozen }}") else "",
-                            modifier = Modifier.weight(1f),
-                        ) { vm.openCoins(Screen.Home) }
+                    Row(Modifier.fillMaxWidth().padding(top = 10.dp).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        CoinsTile(vm, Modifier.weight(1f).fillMaxHeight())
                         if (vm.lnConfig != null) {
                             @Suppress("UNUSED_VARIABLE") val bv = vm.lnBackupVersion
                             val b = vm.lnBalance
                             HomeTile(
-                                icon = { Icon(Icons.Default.Bolt, null, tint = Color(0xFFF2B705)) },
+                                icon = { Icon(Icons.Default.Bolt, null, tint = Color(0xFFF2B705), modifier = Modifier.size(16.dp)) },
                                 title = "Lightning",
                                 value = when { b != null -> vm.amount(b.canSendSat); vm.lnError != null -> L("nedostupný", "unreachable"); else -> "…" },
                                 warning = vm.lnBackupNeeded,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
                             ) { vm.openLightning() }
                         }
                     }
@@ -568,19 +563,61 @@ fun HistoryScreen(vm: WalletViewModel, act: FragmentActivity, filter: String?) {
     vm.txDetail?.let { TxDetailDialog(it, vm, act) }
 }
 
-/** Malá dlaždice na hlavní stránce (Mince, Lightning). */
+/** Neutrální barva vystouplých dlaždic Mince a Lightning. */
+private val TileTint = Color(0xFF9AA0AA)
+
+/** Malá dlaždice na hlavní stránce (Lightning) – stejný vystouplý styl jako Bez KYC / KYC. */
 @Composable
 private fun HomeTile(icon: @Composable () -> Unit, title: String, value: String, modifier: Modifier, warning: Boolean = false, onClick: () -> Unit) {
-    GlassCard(modifier.clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick)) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+    RaisedTile(TileTint, onClick, modifier, horizontalAlignment = Alignment.Start) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             icon()
-            Spacer(Modifier.width(8.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("$title ›", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (warning) { Spacer(Modifier.width(4.dp)); Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(HayekOrange)) }
+            Spacer(Modifier.width(6.dp))
+            Text("$title ›", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (warning) { Spacer(Modifier.width(4.dp)); Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(HayekOrange)) }
+        }
+        Spacer(Modifier.weight(1f))
+        Text(value, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+    }
+}
+
+/**
+ * Dlaždice Mince: tečka za každou minci v barvě značky (zmrazené modře, nepotvrzené průhledně)
+ * a cena utracení všech mincí při běžném poplatku.
+ */
+@Composable
+private fun CoinsTile(vm: WalletViewModel, modifier: Modifier) {
+    @Suppress("UNUSED_VARIABLE") val tv = vm.tagsVersion
+    val coins = vm.coins.sortedByDescending { it.valueSat }
+    val active = coins.filter { !it.frozen }
+    val rate = vm.feeEstimates?.normal ?: vm.netStats?.normalFee
+    val maxDots = 11
+    RaisedTile(TileTint, { vm.openCoins(Screen.Home) }, modifier, horizontalAlignment = Alignment.Start) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Toll, null, tint = HayekOrange, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(L("Mince · ${coins.size} ›", "Coins · ${coins.size} ›"), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.height(6.dp))
+            if (coins.isEmpty()) Text(L("žádné", "none"), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                coins.take(maxDots).forEach { c ->
+                    val color = if (c.frozen) Color(0xFF3B8ED6) else vm.coinTag(c)?.color ?: CoinTag.UNTAGGED_COLOR
+                    Box(Modifier.size(11.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color.copy(alpha = if (c.confirmed) 1f else 0.45f)))
                 }
-                Text(value, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                if (coins.size > maxDots) Text("+${coins.size - maxDots}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.height(5.dp))
+            if (active.isNotEmpty() && rate != null) {
+                val cost = SpendCost.cost(rate) * active.size
+                val dust = active.count { SpendCost.level(it.valueSat, rate) == SpendCost.Level.DUST }
+                Text(
+                    if (dust > 0) L("$dust se nevyplatí utratit", "$dust not worth spending")
+                    else L("utratit vše ≈ ${if (vm.hideBalance) "•••" else formatSat(cost)}", "spend all ≈ ${if (vm.hideBalance) "•••" else formatSat(cost)}"),
+                    fontSize = 11.sp, maxLines = 1,
+                    color = if (dust > 0) SpendCost.Level.DUST.color else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

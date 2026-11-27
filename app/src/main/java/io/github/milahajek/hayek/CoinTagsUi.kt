@@ -89,11 +89,7 @@ fun TagBalances(vm: WalletViewModel) {
 
 @Composable
 private fun BalanceTile(tag: CoinTag, sat: Long, vm: WalletViewModel, modifier: Modifier, onClick: () -> Unit) {
-    Column(
-        modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).background(tag.color.copy(alpha = 0.10f))
-            .border(1.dp, tag.color.copy(alpha = 0.45f), RoundedCornerShape(16.dp)).padding(vertical = 10.dp, horizontal = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    RaisedTile(tag.color, onClick, modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(tag.color))
             Spacer(Modifier.width(6.dp))
