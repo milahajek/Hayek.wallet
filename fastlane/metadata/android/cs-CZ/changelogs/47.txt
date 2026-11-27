@@ -1,0 +1,2 @@
+• Zůstatek je přímo na pozadí obrazovky bez šedé karty.
+• Dlaždice Bez KYC, KYC, Mince a Lightning jsou stejně velké a tvoří pravidelnou mřížku.

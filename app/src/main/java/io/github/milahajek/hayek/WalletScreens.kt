@@ -62,9 +62,9 @@ fun HomeScreen(vm: WalletViewModel, act: FragmentActivity) {
                 }
                 if (vm.wallets.size > 1) item { WalletSwitcher(vm); Spacer(Modifier.height(10.dp)) }
                 item {
-                    GlassCard(Modifier.fillMaxWidth()) {
-                        Box(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(20.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    // Zůstatek bez karty – na stejném tmavém pozadí jako zbytek obrazovky.
+                    Box(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(top = 12.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                                 // Klepnutí = všechny transakce, podržení = skrýt / zobrazit částky.
                                 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
                                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).combinedClickable(
@@ -82,11 +82,10 @@ fun HomeScreen(vm: WalletViewModel, act: FragmentActivity) {
                                 }
                                 TagBalances(vm)
                             }
-                            IconButton(onClick = { vm.toggleHideBalance() }, Modifier.align(Alignment.TopEnd).padding(4.dp)) {
+                            IconButton(onClick = { vm.toggleHideBalance() }, Modifier.align(Alignment.TopEnd)) {
                                 Icon(if (vm.hideBalance) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                     if (vm.hideBalance) L("Zobrazit zůstatek", "Show balance") else L("Skrýt zůstatek", "Hide balance"), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                        }
                     }
                 }
                 if (vm.watchOnly) item {
@@ -97,7 +96,7 @@ fun HomeScreen(vm: WalletViewModel, act: FragmentActivity) {
                 }
                 // Mince a Lightning vedle sebe – uvolní místo pro transakce.
                 item {
-                    Row(Modifier.fillMaxWidth().padding(top = 10.dp).height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(top = 10.dp).height(HOME_TILE_HEIGHT), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         CoinsTile(vm, Modifier.weight(1f).fillMaxHeight())
                         if (vm.lnConfig != null) {
                             @Suppress("UNUSED_VARIABLE") val bv = vm.lnBackupVersion
@@ -562,6 +561,9 @@ fun HistoryScreen(vm: WalletViewModel, act: FragmentActivity, filter: String?) {
     }
     vm.txDetail?.let { TxDetailDialog(it, vm, act) }
 }
+
+/** Výška všech čtyř dlaždic na hlavní stránce (Bez KYC, KYC, Mince, Lightning). */
+val HOME_TILE_HEIGHT = 88.dp
 
 /** Neutrální barva vystouplých dlaždic Mince a Lightning. */
 private val TileTint = Color(0xFF9AA0AA)

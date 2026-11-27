@@ -72,9 +72,9 @@ fun TagBalances(vm: WalletViewModel) {
     Column(Modifier.fillMaxWidth().padding(top = 14.dp)) {
         // Poměr skupin ukazují samotné dlaždice; samostatný pruh byl navíc.
         @Suppress("UNUSED_VARIABLE") val t = total
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            BalanceTile(CoinTag.NOKYC, no, vm, Modifier.weight(1f)) { vm.openHistory(CoinTag.NOKYC.key) }
-            BalanceTile(CoinTag.KYC, kyc, vm, Modifier.weight(1f)) { vm.openHistory(CoinTag.KYC.key) }
+        Row(Modifier.fillMaxWidth().height(HOME_TILE_HEIGHT), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            BalanceTile(CoinTag.NOKYC, no, vm, Modifier.weight(1f).fillMaxHeight()) { vm.openHistory(CoinTag.NOKYC.key) }
+            BalanceTile(CoinTag.KYC, kyc, vm, Modifier.weight(1f).fillMaxHeight()) { vm.openHistory(CoinTag.KYC.key) }
         }
         if (none > 0) Row(
             Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(10.dp)).clickable { vm.openCoins(Screen.Home) }.padding(4.dp),
@@ -89,7 +89,7 @@ fun TagBalances(vm: WalletViewModel) {
 
 @Composable
 private fun BalanceTile(tag: CoinTag, sat: Long, vm: WalletViewModel, modifier: Modifier, onClick: () -> Unit) {
-    RaisedTile(tag.color, onClick, modifier) {
+    RaisedTile(tag.color, onClick, modifier, verticalArrangement = Arrangement.Center) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(8.dp).clip(CircleShape).background(tag.color))
             Spacer(Modifier.width(6.dp))

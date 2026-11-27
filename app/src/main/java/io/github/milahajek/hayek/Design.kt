@@ -206,6 +206,7 @@ fun RaisedTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     horizontalAlignment: Alignment.Horizontal = Alignment.CenterHorizontally,
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val src = remember { MutableInteractionSource() }
@@ -228,6 +229,7 @@ fun RaisedTile(
             .clickable(src, ripple(color = tint), onClick = onClick)
             .padding(vertical = 12.dp, horizontal = 12.dp),
         horizontalAlignment = horizontalAlignment,
+        verticalArrangement = verticalArrangement,
         content = content,
     )
 }
