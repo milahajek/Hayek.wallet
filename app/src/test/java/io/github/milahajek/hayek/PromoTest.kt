@@ -124,6 +124,8 @@ class PromoTest {
             listOf(t, t - 380, t - 1_460, t - 1_700, t - 2_950, t - 3_320, t - 4_100), t - 144 * 590, t - 573 * 588, 0x1701E060, 12, 6, 2, 1.0)
         it.screen = Screen.Network
     }
+    @Config(qualifiers = "w384dp-h832dp-xxhdpi")
+    @Test fun p23_home_phone() = shoot("p23_home_phone") { base(it); tags(it); it.setThemeMode(2); it.screen = Screen.Home }
     @Test fun p18_server_setup() = shoot("p18_server_setup") { it.screen = Screen.ServerSetup }
     @Test fun p4_send() = shoot("p4_send") { base(it); it.feeEstimates = FeeEstimates(14, 6, 2); it.chooseFee(FeeChoice.NORMAL); it.screen = Screen.Send }
 }

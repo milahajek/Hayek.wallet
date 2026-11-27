@@ -5,6 +5,8 @@ import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,73 +40,103 @@ import com.google.zxing.qrcode.QRCodeWriter
 
 @Composable
 fun HomeScreen(vm: WalletViewModel, act: FragmentActivity) {
-    val ctx = LocalContext.current
     val st = vm.state
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Spacer(Modifier.height(12.dp))
-        if (vm.serverUrl.isBlank()) {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(L("Nastavte svůj uzel", "Set up your node"), fontWeight = FontWeight.Bold)
-                    Text(L("Zadejte v Nastavení adresu svého Electrum serveru (Fulcrum, ElectRS). Kdo vlastní uzel nemá, může si tam vybrat veřejný server.", "Enter your Electrum server address (Fulcrum, ElectRS) in Settings. Without your own node you can choose a public server there."), fontSize = 13.sp)
-                    Spacer(Modifier.height(8.dp))
-                    HayekButton(onClick = { vm.screen = Screen.Settings }, Modifier.fillMaxWidth()) { Text(L("Otevřít Nastavení", "Open Settings")) }
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-        }
-        if (vm.wallets.size > 1) { WalletSwitcher(vm); Spacer(Modifier.height(10.dp)) }
-        GlassCard(Modifier.fillMaxWidth()) {
-            Box(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(20.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    // Klepnutí na zůstatek otevře všechny transakce (skrytí částek je na ikoně oka).
-                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { vm.openHistory(null) }, horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(L("Zůstatek", "Balance"), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(vm.amount(st?.totalSat ?: 0), fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                        Text(if (vm.hideBalance) L("skryto", "hidden") else formatBtc(st?.totalSat ?: 0), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(L("Všechny transakce ›", "All transactions ›"), fontSize = 12.sp, color = HayekOrange)
+    val view = androidx.compose.ui.platform.LocalView.current
+    val txs = st?.txs.orEmpty()
+    // Na hlavní stránce jen čekající platby a poslední potvrzená; celá historie je za zůstatkem.
+    val recent = txs.filter { !it.confirmed } + txs.filter { it.confirmed }.take(2)
+    Column(Modifier.fillMaxSize()) {
+        // Obnovení stažením dolů (místo ikony v horním rohu, kam se na velkém telefonu špatně dosahuje).
+        PullToRefreshBox(isRefreshing = vm.busy, onRefresh = { vm.sync() }, modifier = Modifier.weight(1f)) {
+            LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                item { Spacer(Modifier.height(12.dp)) }
+                if (vm.serverUrl.isBlank()) item {
+                    GlassCard(Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(L("Nastavte svůj uzel", "Set up your node"), fontWeight = FontWeight.Bold)
+                            Text(L("Zadejte v Nastavení adresu svého Electrum serveru (Fulcrum, ElectRS). Kdo vlastní uzel nemá, může si tam vybrat veřejný server.", "Enter your Electrum server address (Fulcrum, ElectRS) in Settings. Without your own node you can choose a public server there."), fontSize = 13.sp)
+                            Spacer(Modifier.height(8.dp))
+                            HayekButton(onClick = { vm.screen = Screen.Settings }, Modifier.fillMaxWidth()) { Text(L("Otevřít Nastavení", "Open Settings")) }
+                        }
                     }
-                    val pending = st?.pendingSat ?: 0
-                    if (pending > 0 && !vm.hideBalance) {
-                        Text(L("z toho čeká na potvrzení: ${formatSat(pending)}", "of which unconfirmed: ${formatSat(pending)}"), color = HayekOrange, fontSize = 13.sp)
+                }
+                if (vm.wallets.size > 1) item { WalletSwitcher(vm); Spacer(Modifier.height(10.dp)) }
+                item {
+                    GlassCard(Modifier.fillMaxWidth()) {
+                        Box(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(20.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                                // Klepnutí = všechny transakce, podržení = skrýt / zobrazit částky.
+                                @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+                                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).combinedClickable(
+                                    onClick = { vm.openHistory(null) },
+                                    onLongClick = { view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS); vm.toggleHideBalance() },
+                                ), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(L("Zůstatek", "Balance"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(vm.amount(st?.totalSat ?: 0), fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                                    Text(if (vm.hideBalance) L("skryto · podržením zobrazíte", "hidden · hold to show") else formatBtc(st?.totalSat ?: 0), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(L("Všechny transakce ›", "All transactions ›"), fontSize = 12.sp, color = HayekOrange)
+                                }
+                                val pending = st?.pendingSat ?: 0
+                                if (pending > 0 && !vm.hideBalance) {
+                                    Text(L("z toho čeká na potvrzení: ${formatSat(pending)}", "of which unconfirmed: ${formatSat(pending)}"), color = HayekOrange, fontSize = 13.sp)
+                                }
+                                TagBalances(vm)
+                            }
+                            IconButton(onClick = { vm.toggleHideBalance() }, Modifier.align(Alignment.TopEnd).padding(4.dp)) {
+                                Icon(if (vm.hideBalance) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    if (vm.hideBalance) L("Zobrazit zůstatek", "Show balance") else L("Skrýt zůstatek", "Hide balance"), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
-                    TagBalances(vm)
                 }
-                IconButton(onClick = { vm.toggleHideBalance() }, Modifier.align(Alignment.TopEnd).padding(4.dp)) {
-                    Icon(if (vm.hideBalance) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        if (vm.hideBalance) L("Zobrazit zůstatek", "Show balance") else L("Skrýt zůstatek", "Hide balance"), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (vm.watchOnly) item {
+                    Text(
+                        L("Jen sledování: telefon nemá soukromé klíče. Platby připraví a podepíšete je hardwarovou peněženkou (Coldcard přes NFC nebo kartu).", "Watch-only: the phone holds no private keys. It prepares payments and you sign them with a hardware wallet (Coldcard via NFC or memory card)."),
+                        fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
+                // Mince a Lightning vedle sebe – uvolní místo pro transakce.
+                item {
+                    Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        HomeTile(
+                            icon = { Icon(Icons.Default.Toll, null, tint = HayekOrange) },
+                            title = L("Mince", "Coins"),
+                            value = "${vm.coins.size}" + if (vm.coins.any { it.frozen }) L(" · ❄ ${vm.coins.count { it.frozen }}", " · ❄ ${vm.coins.count { it.frozen }}") else "",
+                            modifier = Modifier.weight(1f),
+                        ) { vm.openCoins(Screen.Home) }
+                        if (vm.lnConfig != null) {
+                            @Suppress("UNUSED_VARIABLE") val bv = vm.lnBackupVersion
+                            val b = vm.lnBalance
+                            HomeTile(
+                                icon = { Icon(Icons.Default.Bolt, null, tint = Color(0xFFF2B705)) },
+                                title = "Lightning",
+                                value = when { b != null -> vm.amount(b.canSendSat); vm.lnError != null -> L("nedostupný", "unreachable"); else -> "…" },
+                                warning = vm.lnBackupNeeded,
+                                modifier = Modifier.weight(1f),
+                            ) { vm.openLightning() }
+                        }
+                    }
+                }
+                item { Text(L("Poslední transakce", "Latest transactions"), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)) }
+                if (txs.isEmpty()) item {
+                    Text(if (vm.busy) L("Načítám z vašeho uzlu…", "Loading from your node…") else L("Zatím žádné transakce.", "No transactions yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                items(recent, key = { it.txid }) { tx -> TxRow(tx, vm) { vm.openTxDetail(tx) } }
+                if (txs.size > recent.size) item {
+                    TextButton(onClick = { vm.openHistory(null) }, Modifier.fillMaxWidth()) {
+                        Text(L("Všechny transakce (${txs.size}) ›", "All transactions (${txs.size}) ›"))
+                    }
+                }
+                item { Spacer(Modifier.height(8.dp)) }
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            HayekButton(onClick = { vm.screen = Screen.Receive }, Modifier.weight(1f).height(52.dp)) {
-                Icon(Icons.AutoMirrored.Filled.CallReceived, null); Spacer(Modifier.width(6.dp)); Text(L("Přijmout", "Receive"))
+        // Hlavní akce dole v dosahu palce.
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            HayekButton(onClick = { vm.screen = Screen.Receive }, Modifier.weight(1f).height(56.dp)) {
+                Icon(Icons.AutoMirrored.Filled.CallReceived, null); Spacer(Modifier.width(6.dp)); Text(L("Přijmout", "Receive"), fontSize = 16.sp)
             }
-            HayekButton(onClick = { vm.openSend() }, Modifier.weight(1f).height(52.dp)) {
-                Icon(Icons.AutoMirrored.Filled.CallMade, null); Spacer(Modifier.width(6.dp)); Text(L("Odeslat", "Send"))
-            }
-        }
-        if (vm.watchOnly) Text(
-            L("Jen sledování: telefon nemá soukromé klíče. Platby připraví a podepíšete je hardwarovou peněženkou (Coldcard přes NFC nebo kartu).", "Watch-only: the phone holds no private keys. It prepares payments and you sign them with a hardware wallet (Coldcard via NFC or memory card)."),
-            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp)
-        )
-        GlassButton(onClick = { vm.openCoins(Screen.Home) }, Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            Icon(Icons.Default.Toll, null); Spacer(Modifier.width(6.dp))
-            Text(L("Mince (UTXO): ${vm.coins.size}", "Coins (UTXO): ${vm.coins.size}") + if (vm.coins.any { it.frozen }) L(" · zmrazené: ${vm.coins.count { it.frozen }}", " · frozen: ${vm.coins.count { it.frozen }}") else "")
-        }
-        if (vm.lnConfig != null) { Spacer(Modifier.height(8.dp)); LightningHomeCard(vm) }
-        Text(L("Poslední transakce", "Latest transactions"), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
-        val txs = st?.txs.orEmpty()
-        if (txs.isEmpty()) Text(if (vm.busy) L("Načítám z vašeho uzlu…", "Loading from your node…") else L("Zatím žádné transakce.", "No transactions yet."), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        // Na hlavní stránce jen čekající platby a poslední potvrzená; celá historie je za zůstatkem.
-        val recent = txs.filter { !it.confirmed } + txs.filter { it.confirmed }.take(1)
-        LazyColumn(Modifier.fillMaxSize()) {
-            items(recent, key = { it.txid }) { tx -> TxRow(tx, vm) { vm.openTxDetail(tx) } }
-            if (txs.size > recent.size) item {
-                TextButton(onClick = { vm.openHistory(null) }, Modifier.fillMaxWidth()) {
-                    Text(L("Všechny transakce (${txs.size}) ›", "All transactions (${txs.size}) ›"))
-                }
+            HayekButton(onClick = { vm.openSend() }, Modifier.weight(1f).height(56.dp)) {
+                Icon(Icons.AutoMirrored.Filled.CallMade, null); Spacer(Modifier.width(6.dp)); Text(L("Odeslat", "Send"), fontSize = 16.sp)
             }
         }
     }
@@ -534,4 +566,22 @@ fun HistoryScreen(vm: WalletViewModel, act: FragmentActivity, filter: String?) {
         }
     }
     vm.txDetail?.let { TxDetailDialog(it, vm, act) }
+}
+
+/** Malá dlaždice na hlavní stránce (Mince, Lightning). */
+@Composable
+private fun HomeTile(icon: @Composable () -> Unit, title: String, value: String, modifier: Modifier, warning: Boolean = false, onClick: () -> Unit) {
+    GlassCard(modifier.clip(RoundedCornerShape(20.dp)).clickable(onClick = onClick)) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            icon()
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("$title ›", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (warning) { Spacer(Modifier.width(4.dp)); Box(Modifier.size(7.dp).clip(androidx.compose.foundation.shape.CircleShape).background(HayekOrange)) }
+                }
+                Text(value, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            }
+        }
+    }
 }

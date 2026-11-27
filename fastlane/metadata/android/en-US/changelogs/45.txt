@@ -1,0 +1,4 @@
+• Receive and Send moved to the bottom, within thumb reach.
+• Pull down to refresh.
+• Coins and Lightning as two tiles side by side, more room for transactions.
+• Hold the balance to hide or show amounts; copying confirms with a short vibration.

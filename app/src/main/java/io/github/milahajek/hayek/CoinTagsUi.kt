@@ -70,13 +70,8 @@ fun TagBalances(vm: WalletViewModel) {
     val none = groups[CoinTag.NONE] ?: 0L
     val total = (no + kyc + none).coerceAtLeast(1)
     Column(Modifier.fillMaxWidth().padding(top = 14.dp)) {
-        // poměr skupin
-        if (!vm.hideBalance) Row(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))) {
-            listOf(no to CoinTag.NOKYC.color, kyc to CoinTag.KYC.color, none to CoinTag.UNTAGGED_COLOR).filter { it.first > 0 }.forEach { (v, c) ->
-                Box(Modifier.weight(v.toFloat() / total).fillMaxHeight().background(c))
-            }
-        }
-        Spacer(Modifier.height(10.dp))
+        // Poměr skupin ukazují samotné dlaždice; samostatný pruh byl navíc.
+        @Suppress("UNUSED_VARIABLE") val t = total
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             BalanceTile(CoinTag.NOKYC, no, vm, Modifier.weight(1f)) { vm.openHistory(CoinTag.NOKYC.key) }
             BalanceTile(CoinTag.KYC, kyc, vm, Modifier.weight(1f)) { vm.openHistory(CoinTag.KYC.key) }

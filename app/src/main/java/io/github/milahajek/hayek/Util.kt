@@ -44,6 +44,9 @@ fun copy(ctx: Context, text: String, sensitive: Boolean = false) {
     val clip = ClipData.newPlainText("Hayek Wallet", text)
     if (sensitive) clip.description.extras = android.os.PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
     cm.setPrimaryClip(clip)
+    // Krátké zavibrování jako potvrzení (bez oprávnění, přes okno aplikace).
+    (ctx as? android.app.Activity ?: (ctx as? android.content.ContextWrapper)?.baseContext as? android.app.Activity)
+        ?.window?.decorView?.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
     if (sensitive) android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
         runCatching { if (cm.primaryClip?.getItemAt(0)?.text?.toString() == text) cm.clearPrimaryClip() }
     }, 60_000)

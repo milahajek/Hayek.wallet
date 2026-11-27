@@ -196,7 +196,6 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                 },
                 actions = {
                     if (screen == Screen.Home) {
-                        IconButton(onClick = { vm.sync() }, enabled = !vm.busy) { Icon(Icons.Default.Refresh, L("Obnovit", "Refresh")) }
                         IconButton(onClick = { vm.screen = Screen.Settings }) {
                             BadgedBox(badge = { if (vm.labelChanges > 0) Badge(containerColor = HayekOrange) }) {
                                 Icon(Icons.Default.Settings, if (vm.labelChanges > 0) L("Nastavení – štítky nejsou zálohované", "Settings – labels not backed up") else L("Nastavení", "Settings"))
