@@ -633,6 +633,9 @@ class WalletCore(private val dbFile: File, val secret: String, var serverUrl: St
      * Odhady poplatků z vlastního uzlu (Bitcoin Core estimatesmartfee přes Electrum server).
      * Rychle = do 2 bloků (~20 min), Normálně = do 6 bloků (~1 h), Levně = do 144 bloků (~1 den).
      */
+    /** Veřejné statistiky sítě ze serveru (hlavičky bloků, poplatky) – viz Network.kt. */
+    fun networkStats(): NetworkStats = withClient { readNetworkStats(it) }
+
     fun feeEstimates(): FeeEstimates {
         fun est(blocks: Long): Long? = try {
             val btcPerKb = withClient { it.estimateFee(blocks.toULong()) }

@@ -1,0 +1,2 @@
+• Stav sítě: klepnutím na „připojeno k vašemu uzlu“ v horní liště otevřete přehled sítě z vlastního uzlu – poslední bloky, výkon sítě, úprava obtížnosti, halving, vytěžené bitcoiny a poplatky.
+• Nový widget na plochu „Hayek · Síť“: poslední blok, poplatky, obtížnost a halving. O peněžence nic neukazuje.

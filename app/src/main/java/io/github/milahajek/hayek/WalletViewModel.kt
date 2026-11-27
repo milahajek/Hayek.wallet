@@ -36,6 +36,8 @@ sealed interface Screen {
     data object Send : Screen
     data object Settings : Screen
     data object Seed : Screen
+    /** Stav sítě: veřejné údaje z uzlu / serveru (bloky, těžba, poplatky). */
+    data object Network : Screen
     /** Všechny transakce; [filter] = klíč značky (CoinTag / „none“), null = bez filtru. */
     data class History(val filter: String? = null) : Screen
     data object Lightning : Screen
@@ -280,6 +282,32 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         return outIndex
     }
     fun openHistory(filter: String?) { screen = Screen.History(filter) }
+
+    // ---- Stav sítě ----
+    var netStats by mutableStateOf<NetworkStats?>(NetworkCache.load(getApplication()))
+    var netLoading by mutableStateOf(false)
+    var netError by mutableStateOf<String?>(null)
+    var networkReturn: Screen = Screen.Home
+    fun openNetwork() {
+        if (screen != Screen.Network) networkReturn = screen
+        screen = Screen.Network
+        refreshNetwork()
+    }
+    /** Načte statistiky ze serveru. Neblokuje ostatní práci (nenastavuje busy), jen sdílí zámek spojení. */
+    fun refreshNetwork() {
+        val c = core ?: return
+        if (netLoading) return
+        netLoading = true
+        viewModelScope.launch {
+            try {
+                val s = lock.withLock { withContext(Dispatchers.IO) { c.networkStats() } }
+                netStats = s; netError = null
+                withContext(Dispatchers.IO) { NetworkCache.save(getApplication(), s, isPublicServer(serverUrl)); HayekWidget.updateAll(getApplication()) }
+            } catch (e: Exception) {
+                netError = friendly(e)
+            } finally { netLoading = false }
+        }
+    }
 
     fun inputTags(p: PreparedTx): List<CoinTag?> = p.inputIds.map { id -> coins.find { it.id == id }?.let { coinTag(it) } }
 

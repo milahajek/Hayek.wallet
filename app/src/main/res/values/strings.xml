@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_desc">Bitcoin network from your node: latest block, fees, difficulty adjustment and halving. Shows nothing about your wallet.</string>
+    <string name="widget_label">Hayek · Network</string>
+</resources>

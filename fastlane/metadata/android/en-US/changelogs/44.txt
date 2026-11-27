@@ -1,0 +1,2 @@
+• Network status: tap "connected to your node" in the top bar for an overview from your own node – recent blocks, hashrate, difficulty adjustment, halving, mined supply and fees.
+• New home screen widget "Hayek · Network": latest block, fees, difficulty and halving. Shows nothing about your wallet.

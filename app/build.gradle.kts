@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.milahajek.hayek"
         minSdk = 30
         targetSdk = 36
-        versionCode = 43
-        versionName = "1.18.7"
+        versionCode = 44
+        versionName = "1.19.0"
         // Sestavení pro Google Play (./gradlew bundleRelease -Pplay): sekce „Podpořit vývoj“ jen s QR kódem
         // a adresou, bez tlačítka „Přispět“ (pravidla Play pro platby v aplikacích). Verze z GitHubu ho má dál.
         buildConfigField("boolean", "PLAY", project.hasProperty("play").toString())
@@ -68,6 +68,7 @@ dependencies {
     implementation("androidx.camera:camera-view:1.5.3")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
+    implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation("androidx.fragment:fragment-ktx:1.8.9")
     implementation(platform("androidx.compose:compose-bom:2025.10.01"))
     implementation("androidx.compose.material3:material3")

@@ -138,6 +138,7 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
             screen == Screen.Welcome && vm.adding -> vm.cancelAddWallet()
             screen == Screen.Coins -> vm.screen = vm.coinsReturn
             screen is Screen.History -> vm.screen = Screen.Home
+            screen == Screen.Network -> vm.screen = vm.networkReturn
             screen == Screen.Export || screen == Screen.Seed || screen == Screen.LnSetup -> { vm.revealSeed = false; vm.screen = Screen.Settings }
             screen == Screen.LnPay || screen == Screen.LnReceive -> vm.openLightning()
             screen in inWallet -> { vm.revealSeed = false; vm.screen = if (vm.isOpen) Screen.Home else if (vm.hasWallet) Screen.Locked else Screen.Welcome }
@@ -146,7 +147,7 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
             setup -> vm.screen = Screen.Welcome
         }
     }
-    if (screen in inWallet || screen is Screen.History || setup || screen is Screen.Intro || screen == Screen.ServerSetup || (screen == Screen.Welcome && vm.adding)) BackHandler { back() }
+    if (screen in inWallet || screen is Screen.History || screen == Screen.Network || setup || screen is Screen.Intro || screen == Screen.ServerSetup || (screen == Screen.Welcome && vm.adding)) BackHandler { back() }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -181,13 +182,15 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                             false -> if (public) L("● veřejný server nedostupný", "● public server unreachable") else L("● uzel nedostupný", "● node unreachable")
                             null -> L("Bitcoin mainnet · skutečné peníze", "Bitcoin mainnet · real money")
                         } + if (vm.watchOnly && wName.isEmpty()) L(" · jen sledování", " · watch-only") else ""
-                        Text(sub, fontSize = 12.sp, color = when (vm.connected) {
+                        // Klepnutím na stav připojení se otevře Stav sítě (jen v odemčené peněžence).
+                        val canOpenNet = vm.isOpen && vm.connected != null && !setup && screen != Screen.Locked && screen != Screen.Network
+                        Text(sub + if (canOpenNet) " ›" else "", fontSize = 12.sp, color = when (vm.connected) {
                             true -> if (public) HayekOrange else Color(0xFF2E9E4F); false -> MaterialTheme.colorScheme.error; null -> HayekOrange
-                        })
+                        }, modifier = if (canOpenNet) Modifier.clickable { vm.openNetwork() } else Modifier)
                     }
                 },
                 navigationIcon = {
-                    if (screen in inWallet || screen is Screen.History || setup) IconButton(onClick = { back() }) {
+                    if (screen in inWallet || screen is Screen.History || screen == Screen.Network || setup) IconButton(onClick = { back() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, L("Zpět", "Back"))
                     }
                 },
@@ -231,6 +234,7 @@ fun App(vm: WalletViewModel, act: FragmentActivity) {
                 Screen.LnSetup -> IncognitoKeyboard { LnSetupScreen(vm, act) }
                 Screen.Seed -> SeedScreen(vm, act)
                 is Screen.History -> HistoryScreen(vm, act, s.filter)
+                Screen.Network -> NetworkScreen(vm)
             }
             }
             if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth().align(Alignment.TopCenter))
